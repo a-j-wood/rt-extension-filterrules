@@ -200,6 +200,8 @@ sub ScripPrepare {
 The "commit" action of the scrip which applies filter rules to tickets. 
 Returns true on success.
 
+(TODO)
+
 =cut
 
 sub ScripCommit {
@@ -236,11 +238,11 @@ sub ScripCommit {
 
 =head1 Internal package RT::FilterRuleGroup
 
-This package provides the C<RT::FilterRuleGroup> object, which describes a
+This package provides the C<RT::FilterRuleGroup> class, which describes a
 group of filter rules through which a ticket will be passed if it meets the
 basic conditions of the group.
 
-The properties of a filter rule group object are:
+The attributes of this class are:
 
 =over 20
 
@@ -364,69 +366,364 @@ I<Admin> - I<Tools> - I<Filter rule groups>.
 
 =cut
 
+=head2 Create Name => Name, ...
+
+Create a new filter rule group with the supplied properties, as described
+above.  The sort order will be set to 1 more than the highest current value
+so that the new item appears at the end of the list.
+
+Returns ( I<$id>, I<$message> ), where I<$id> is the ID of the new object,
+which will be undefined if there was a problem.
+
+=cut
+
     sub Create {
         my $self = shift;
-        my @args = (
-            'Name' => '',
+        my %args = (
+            'Name'              => '',
+            'CanMatchQueues'    => '',
+            'CanTransferQueues' => '',
+            'CanUseGroups'      => '',
+            'Disabled'          => 0,
             @_
         );
 
-        # TODO: writeme
+        # Allow the fields which take ID lists to be passed as arrayrefs of
+        # IDs, arrayrefs of RT::Queue or RT::Group objects, or as RT::Queues
+        # or RT::Groups collection objects, by converting all of those back
+        # to a comma separated list of IDs.
+        #
+        foreach my $Field ( 'CanMatchQueues', 'CanTransferQueues',
+            'CanUseGroups' )
+        {
+            my $Value = $args{$Field};
+
+            # Convert a collection object into an array ref
+            #
+            if (   ( ref $Value )
+                && ( ref $Value ne 'ARRAY' )
+                && (   UNIVERSAL::isa( $Value, 'RT::Queues' )
+                    || UNIVERSAL::isa( $Value, 'RT::Groups' ) )
+               )
+            {
+                $Value = $Value->ItemsArrayRef();
+            }
+
+            # Convert an array ref into a comma separated ID list
+            #
+            if ( ref $Value eq 'ARRAY' ) {
+                $Value = join( ',',
+                    map { ref $Value ? $Value->id : $Value } @$Value );
+            }
+
+            $args{$Field} = $Value;
+        }
+
+        $args{'SortOrder'} = 1;
+
+        $RT::Handle->BeginTransaction();
+
+        my $AllFilterRuleGroups
+            = RT::FilterRuleGroups->new( $self->CurrentUser );
+        $AllFilterRuleGroups->OrderByCols(
+            { FIELD => 'SortOrder', ORDER => 'DESC' } );
+        $AllFilterRuleGroups->GotoFirstItem();
+        my $FinalFilterRuleGroup = $AllFilterRuleGroups->Next;
+        $args{'SortOrder'} = 1 + $FinalFilterRuleGroup->SortOrder
+            if ($FinalFilterRuleGroup);
+
+        my ( $id, $msg ) = $self->SUPER::Create(%args);
+        unless ($id) {
+            $RT::Handle->Rollback();
+            return ( undef, $msg );
+        }
+
+        my ( $txn_id, $txn_msg, $txn )
+            = $self->_NewTransaction( Type => 'Create' );
+        unless ($txn_id) {
+            $RT::Handle->Rollback();
+            return ( undef, $self->loc( 'Internal error: [_1]', $txn_msg ) );
+        }
+        $RT::Handle->Commit();
+
+        return ( $id,
+            $self->loc( 'Filter rule group [_1] created', $self->id ) );
     }
+
+=head2 CanMatchQueues
+
+Return the queues which rules in this rule group are allowed to use in their
+conditions, as a comma-separated list of queue IDs in a scalar context, or
+as an array of queue IDs in a list context.
+
+=cut
+
+    sub CanMatchQueues {
+        my ($self) = @_;
+        my $Value = $self->_Value('CanMatchQueues');
+        return wantarray ? split /,/, $Value : $Value;
+    }
+
+=head2 CanMatchQueuesObj
+
+Return the same as B<CanMatchQueues>, but as an C<RT::Queues> object, i.e. a
+collection of C<RT::Queue> objects.
+
+=cut
 
     sub CanMatchQueuesObj {
         my ($self) = @_;
-
-        # TODO: writeme
+        my ( @Values, $Collection );
+        @Values     = $self->CanMatchQueues;
+        $Collection = RT::Queues->new( $self->CurrentUser );
+        $Collection->Limit(
+            'FIELD'           => 'id',
+            'VALUE'           => $_,
+            'OPERATOR'        => '=',
+            'ENTRYAGGREGATOR' => 'OR'
+        ) foreach (@Values);
+        $Collection->Limit(
+            'FIELD'    => 'id',
+            'VALUE'    => 0,
+            'OPERATOR' => '='
+        ) if ( scalar @Values < 1 );
+        return $Collection;
     }
+
+=head2 CanTransferQueues
+
+Return the queues which rules in this rule group are allowed to use as
+transfer destinations in their actions, as a comma-separated list of queue
+IDs in a scalar context, or as an array of queue IDs in a list context.
+
+=cut
+
+    sub CanTransferQueues {
+        my ($self) = @_;
+        my $Value = $self->_Value('CanTransferQueues');
+        return wantarray ? split /,/, $Value : $Value;
+    }
+
+=head2 CanTransferQueuesObj
+
+Return the same as B<CanTransferQueues>, but as an C<RT::Queues> object,
+i.e. a collection of C<RT::Queue> objects.
+
+=cut
 
     sub CanTransferQueuesObj {
         my ($self) = @_;
-
-        # TODO: writeme
+        my ( @Values, $Collection );
+        @Values     = $self->CanTransferQueues;
+        $Collection = RT::Queues->new( $self->CurrentUser );
+        $Collection->Limit(
+            'FIELD'           => 'id',
+            'VALUE'           => $_,
+            'OPERATOR'        => '=',
+            'ENTRYAGGREGATOR' => 'OR'
+        ) foreach (@Values);
+        $Collection->Limit(
+            'FIELD'    => 'id',
+            'VALUE'    => 0,
+            'OPERATOR' => '='
+        ) if ( scalar @Values < 1 );
+        return $Collection;
     }
 
+=head2 CanUseGroups
+
+Return the groups which rules in this rule group are allowed to use in match
+conditions and actions, as a comma-separated list of group IDs in a scalar
+context, or as an array of group IDs in a list context.
+
+=cut
+
+    sub CanUseGroups {
+        my ($self) = @_;
+        my $Value = $self->_Value('CanUseGroups');
+        return wantarray ? split /,/, $Value : $Value;
+    }
+
+=head2 CanUseGroupsObj
+
+Return the same as B<CanUseGroups>, but as an C<RT::Groups> object, i.e. a
+collection of C<RT::Group> objects.
+
+=cut
+
     sub CanUseGroupsObj {
+        my ($self) = @_;
+        my ( @Values, $Collection );
+        @Values     = $self->CanUseGroups;
+        $Collection = RT::Groups->new( $self->CurrentUser );
+        $Collection->Limit(
+            'FIELD'           => 'id',
+            'VALUE'           => $_,
+            'OPERATOR'        => '=',
+            'ENTRYAGGREGATOR' => 'OR'
+        ) foreach (@Values);
+        $Collection->Limit(
+            'FIELD'    => 'id',
+            'VALUE'    => 0,
+            'OPERATOR' => '='
+        ) if ( scalar @Values < 1 );
+        return $Collection;
+    }
+
+=head2 SetCanMatchQueues id, id, ...
+
+Set the queues which rules in this rule group are allowed to use in their
+conditions, either as a comma-separated list of queue IDs, an array of queue
+IDs, an array of C<RT::Queue> objects, or an C<RT::Queues> collection.
+
+Returns ( I<$ok>, I<$message> ).
+
+=cut
+
+    sub SetCanMatchQueues {
+        my ( $self, @NewValues ) = @_;
+        my %NewIDs = ();
+
+        foreach my $Item (@NewValues) {
+            if ( not ref $Item ) {
+                foreach ( split /,/, $Item ) {
+                    next if ( !/([0-9]+)/ );
+                    $NewIDs{$1} = 1;
+                }
+            } elsif ( UNIVERSAL::isa( $Item, 'RT::Queue' ) ) {
+                $NewIDs{ $Item->id } = 1 if ( $Item->id );
+            } elsif ( UNIVERSAL::isa( $Item, 'RT::Queues' ) ) {
+                $Item->GotoFirstItem();
+                while ( my $Object = $Item->Next() ) {
+                    $NewIDs{ $Object->id } = 1 if ( $Object->id );
+                }
+            }
+        }
+
+        return $self->_Set(
+            'Field' => 'CanMatchQueues',
+            'Value' => join( ',', sort { $a <=> $b } keys %NewIDs )
+        );
+    }
+
+=head2 SetCanTransferQueues id, id, ...
+
+Set the queues which rules in this filter rule group are allowed to use as
+transfer destinations in their actions, either as a comma-separated list of
+queue IDs, an array of queue IDs, an array of C<RT::Queue> objects, or an
+C<RT::Queues> collection.
+
+Returns ( I<$ok>, I<$message> ).
+
+=cut
+
+    sub SetCanTransferQueues {
+        my ( $self, @NewValues ) = @_;
+        my %NewIDs = ();
+
+        foreach my $Item (@NewValues) {
+            if ( not ref $Item ) {
+                foreach ( split /,/, $Item ) {
+                    next if ( !/([0-9]+)/ );
+                    $NewIDs{$1} = 1;
+                }
+            } elsif ( UNIVERSAL::isa( $Item, 'RT::Queue' ) ) {
+                $NewIDs{ $Item->id } = 1 if ( $Item->id );
+            } elsif ( UNIVERSAL::isa( $Item, 'RT::Queues' ) ) {
+                $Item->GotoFirstItem();
+                while ( my $Object = $Item->Next() ) {
+                    $NewIDs{ $Object->id } = 1 if ( $Object->id );
+                }
+            }
+        }
+
+        return $self->_Set(
+            'Field' => 'CanTransferQueues',
+            'Value' => join( ',', sort { $a <=> $b } keys %NewIDs )
+        );
+    }
+
+=head2 SetCanUseGroups id, id, ...
+
+Set the groups which rules in this rule group are allowed to use in match
+conditions and actions, either as a comma-separated list of group IDs, an
+array of group IDs, an array of C<RT::Group> objects, or an C<RT::Groups>
+collection.
+
+Returns ( I<$ok>, I<$message> ).
+
+=cut
+
+    sub SetCanUseGroups {
+        my ( $self, @NewValues ) = @_;
+        my %NewIDs = ();
+
+        foreach my $Item (@NewValues) {
+            if ( not ref $Item ) {
+                foreach ( split /,/, $Item ) {
+                    next if ( !/([0-9]+)/ );
+                    $NewIDs{$1} = 1;
+                }
+            } elsif ( UNIVERSAL::isa( $Item, 'RT::Group' ) ) {
+                $NewIDs{ $Item->id } = 1 if ( $Item->id );
+            } elsif ( UNIVERSAL::isa( $Item, 'RT::Groups' ) ) {
+                $Item->GotoFirstItem();
+                while ( my $Object = $Item->Next() ) {
+                    $NewIDs{ $Object->id } = 1 if ( $Object->id );
+                }
+            }
+        }
+
+        return $self->_Set(
+            'Field' => 'CanUseGroups',
+            'Value' => join( ',', sort { $a <=> $b } keys %NewIDs )
+        );
+    }
+
+=head2 GroupConditions
+
+Return an C<RT::FilterRules> collection object containing the conditions of
+this filter rule group - if an event meets any of these conditions are met,
+then the caller should process the event through the B<FilterRules> for this
+group.
+
+Note that the filter rules returned by this method all have a B<SortOrder>
+of 0, so can be checked in any order.
+
+(TODO)
+
+=cut
+
+    sub GroupConditions {
         my ($self) = @_;
 
         # TODO: writeme
     }
 
-    sub SetSortOrder {
-        my ( $self, $NewValue ) = @_;
+=head2 AddGroupCondition Name => NAME, ...
+
+Add a condition to this filter rule group; calls B<RT::FilterRule::Create>
+below, overriding the B<FilterRuleGroup> parameter, and returns its output.
+
+(TODO)
+
+=cut
+
+    sub AddGroupCondition {
+        my $self = shift;
+        my %args = ( @_ );
 
         # TODO: writeme
     }
 
-    sub SetName {
-        my ( $self, $NewValue ) = @_;
+=head2 FilterRules
 
-        # TODO: writeme
-    }
+Return an C<RT::FilterRules> collection object containing the filter rules
+for this rule group.
 
-    sub SetCanMatchQueues {
-        my ( $self, $NewValue ) = @_;
+(TODO)
 
-        # TODO: writeme
-    }
-
-    sub SetCanTransferQueues {
-        my ( $self, $NewValue ) = @_;
-
-        # TODO: writeme
-    }
-
-    sub SetCanUseGroups {
-        my ( $self, $NewValue ) = @_;
-
-        # TODO: writeme
-    }
-
-    sub SetDisabled {
-        my ( $self, $NewValue ) = @_;
-
-        # TODO: writeme
-    }
+=cut
 
     sub FilterRules {
         my ($self) = @_;
@@ -434,11 +731,30 @@ I<Admin> - I<Tools> - I<Filter rule groups>.
         # TODO: writeme
     }
 
+=head2 AddFilterRule Name => NAME, ...
+
+Add a filter rule to this filter rule group; calls B<RT::FilterRule::Create>
+below, overriding the B<FilterRuleGroup> parameter, and returns its output.
+
+(TODO)
+
+=cut
+
     sub AddFilterRule {
-        my ( $self, @args ) = @_;
+        my $self = shift;
+        my %args = (@_);
 
         # TODO: writeme
     }
+
+=head2 Delete
+
+Delete this filter rule group, and all of its filter rules.  Returns
+( I<$ok>, I<$message> ).
+
+(TODO)
+
+=cut
 
     sub Delete {
         my ($self) = @_;
@@ -446,12 +762,81 @@ I<Admin> - I<Tools> - I<Filter rule groups>.
         # TODO: writeme
     }
 
-    sub CheckConditions {
-        my $self = shift;
-        my @args = (@_);
+=head2 CheckGroupConditions EVENT
 
+Return true if the given event matches any of the conditions for this filter
+rule group, meaning that the event should be passed through its
+B<FilterRules>, or false if it did not match.
+
+TODO
+
+=cut
+
+    sub CheckGroupConditions {
+        my $self = shift;
+        my %args = (@_);
+
+        # TODO: define event format
         # TODO: writeme
     }
+
+=head2 _Set Field => FIELD, Value => VALUE
+
+Set the value of a field, recording a transaction in the process if
+appropriate.  Returns ( I<$ok>, I<$message> ).
+
+=cut
+
+    sub _Set {
+        my $self = shift;
+        my %args = (
+            'Field' => '',
+            'Value' => '',
+            @_
+        );
+
+        my $OldValue = $self->__Value( $args{'Field'} );
+        return ( 1, $self->loc('No change made') )
+            if ( ( defined $OldValue )
+            && ( defined $args{'Value'} )
+            && ( $Oldvalue eq $args{'Value'} ) );
+
+        $RT::Handle->BeginTransaction();
+
+        my ( $ok, $msg ) = $self->SUPER::_Set(%args);
+
+        if ( not $ok ) {
+            $RT::Handle->Rollback();
+            return ( $ok, $msg );
+        }
+
+        # Don't record a transaction for sort order changes, since they are
+        # very frequent.
+        #
+        if ( ( $args{'Field'} || '' ) ne 'SortOrder' ) {
+            my ( $txn_id, $txn_msg, $txn ) = $self->_NewTransaction(
+                'Type'     => 'Set',
+                'Field'    => $args{'Field'},
+                'NewValue' => $args{'Value'},
+                'OldValue' => $OldValue
+            );
+            if ( not $txn_id ) {
+                $RT::Handle->Rollback();
+                return ( 0, $self->loc( 'Internal error: [_1]', $txn_msg ) );
+            }
+        }
+
+        $RT::Handle->Commit();
+
+        return ( $ok, $msg );
+    }
+
+=head2 _CoreAccessible
+
+Return a hashref describing the attributes of the database table for the
+C<RT::FilterRuleGroup> class.
+
+=cut
 
     sub _CoreAccessible {
         return {
@@ -585,7 +970,7 @@ I<Admin> - I<Tools> - I<Filter rule groups>.
 
 =head1 Internal package RT::FilterRuleGroups
 
-This package provides the C<RT::FilterRuleGroups> object, which describes a
+This package provides the C<RT::FilterRuleGroups> class, which describes a
 collection of filter rule groups.
 
 =cut
@@ -612,11 +997,11 @@ collection of filter rule groups.
 
 =head1 Internal package RT::FilterRule
 
-This package provides the C<RT::FilterRule> object, which describes a filter
+This package provides the C<RT::FilterRule> class, which describes a filter
 rule - the conditions it must not meet, the conditions it must meet, and the
 actions to perform on the ticket if the rule matches.
 
-The properties of a filter rule object are:
+The attributes of this class are:
 
 =over 20
 
@@ -718,7 +1103,7 @@ property is true
 
     sub Create {
         my $self = shift;
-        my @args = (
+        my %args = (
             'Name' => '',
             @_
         );
@@ -728,30 +1113,6 @@ property is true
 
     sub FilterRuleGroupObj {
         my ($self) = @_;
-
-        # TODO: writeme
-    }
-
-    sub SetSortOrder {
-        my ( $self, $NewValue ) = @_;
-
-        # TODO: writeme
-    }
-
-    sub SetName {
-        my ( $self, $NewValue ) = @_;
-
-        # TODO: writeme
-    }
-
-    sub SetTriggerType {
-        my ( $self, $NewValue ) = @_;
-
-        # TODO: writeme
-    }
-
-    sub SetStopIfMatched {
-        my ( $self, $NewValue ) = @_;
 
         # TODO: writeme
     }
@@ -774,12 +1135,6 @@ property is true
         # TODO: writeme
     }
 
-    sub SetDisabled {
-        my ( $self, $NewValue ) = @_;
-
-        # TODO: writeme
-    }
-
     sub Delete {
         my ($self) = @_;
 
@@ -794,14 +1149,14 @@ property is true
 
     sub Match {
         my $self = shift;
-        my @args = (@_);
+        my %args = (@_);
 
         # TODO: writeme
     }
 
     sub RecordMatch {
         my $self = shift;
-        my @args = (@_);
+        my %args = (@_);
 
         # TODO: writeme
     }
@@ -811,6 +1166,13 @@ property is true
 
         # TODO: writeme
     }
+
+=head2 _CoreAccessible
+
+Return a hashref describing the attributes of the database table for the
+C<RT::FilterRule> class.
+
+=cut
 
     sub _CoreAccessible {
         return {
@@ -977,7 +1339,7 @@ property is true
 
 =head1 Internal package RT::FilterRules
 
-This package provides the C<RT::FilterRules> object, which describes a
+This package provides the C<RT::FilterRules> class, which describes a
 collection of filter rules.
 
 =cut
@@ -1004,10 +1366,10 @@ collection of filter rules.
 
 =head1 Internal package RT::FilterRuleMatch
 
-This package provides the C<RT::FilterRuleMatch> object, which records when
+This package provides the C<RT::FilterRuleMatch> class, which records when
 a filter rule matched an event on a ticket.
 
-The properties of a filter rule match object are:
+The attributes of this class are:
 
 =over 12
 
@@ -1045,7 +1407,7 @@ object via B<CreatedObj>)
 
     sub Create {
         my $self = shift;
-        my @args = (
+        my %args = (
             'FilterRule' => 0,
             'Ticket'     => 0,
             @_
@@ -1065,6 +1427,13 @@ object via B<CreatedObj>)
 
         # TODO: writeme
     }
+
+=head2 _CoreAccessible
+
+Return a hashref describing the attributes of the database table for the
+C<RT::FilterRuleMatch> class.
+
+=cut
 
     sub _CoreAccessible {
         return {
@@ -1121,7 +1490,7 @@ object via B<CreatedObj>)
 
 =head1 Internal package RT::FilterRuleMatches
 
-This package provides the C<RT::FilterRuleMatches> object, which describes a
+This package provides the C<RT::FilterRuleMatches> class, which describes a
 collection of filter rule matches.
 
 =cut
