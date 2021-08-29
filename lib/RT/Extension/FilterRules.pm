@@ -1050,7 +1050,7 @@ appropriate.  Returns ( I<$ok>, I<$message> ).
         return ( 1, $self->loc('No change made') )
             if ( ( defined $OldValue )
             && ( defined $args{'Value'} )
-            && ( $Oldvalue eq $args{'Value'} ) );
+            && ( $OldValue eq $args{'Value'} ) );
 
         $RT::Handle->BeginTransaction();
 
@@ -1408,7 +1408,7 @@ which will be undefined if there was a problem.
 
         $RT::Handle->BeginTransaction();
 
-        my $AllFilterFules = RT::FilterRules->new( $self->CurrentUser );
+        my $AllFilterRules = RT::FilterRules->new( $self->CurrentUser );
 
         $AllFilterRules->Limit(
             'FIELD'    => 'FilterRuleGroup',
@@ -1674,7 +1674,7 @@ appropriate.  Returns ( I<$ok>, I<$message> ).
         return ( 1, $self->loc('No change made') )
             if ( ( defined $OldValue )
             && ( defined $args{'Value'} )
-            && ( $Oldvalue eq $args{'Value'} ) );
+            && ( $OldValue eq $args{'Value'} ) );
 
         $RT::Handle->BeginTransaction();
 
