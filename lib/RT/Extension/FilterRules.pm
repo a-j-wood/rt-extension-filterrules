@@ -210,13 +210,12 @@ sub ScripPrepare {
 The "commit" action of the scrip which applies filter rules to tickets. 
 Returns true on success.
 
-(TODO)
-
 =cut
 
 sub ScripCommit {
     my ( $Package, $Action ) = @_;
     my ( $TriggerType, $QueueFrom, $QueueTo ) = ( undef, undef, undef );
+    my ( $FilterRuleGroups, $FilterRuleGroup, $Matches, $Actions );
 
     #
     # Determine the type of trigger to look for, and the queue(s) involved.
@@ -237,11 +236,74 @@ sub ScripCommit {
     #
     return 0 if ( not defined $TriggerType );
 
-    # TODO: load all filter rule groups
-    # TODO: for each rule group, check it's eligible
-    # TODO: for each eligible group, apply its rules
+    $Matches = [];
+    $Actions = [];
+
+    # Load all filter rule groups.
+    #
+    $FilterRuleGroups = RT::FilterRuleGroups->new( RT->SystemUser );
+    $FilterRuleGroups->Limit(
+        'FIELD'    => 'Disabled',
+        'VALUE'    => 0,
+        'OPERATOR' => '='
+    );
+
+    # Check the filter rules in each filter rule group whose group
+    # conditions are met, building up a list of actions to perform.
+    #
+    while ( $FilterRuleGroup = $FilterRuleGroups->Next ) {
+        next
+            if (
+            not $FilterRuleGroup->CheckGroupConditions(
+                'Matches'         => [],
+                'TriggerType'     => $TriggerType,
+                'From'            => $QueueFrom,
+                'To'              => $QueueTo,
+                'Ticket'          => $Action->TicketObj,
+                'IncludeDisabled' => 0
+            )
+            );
+        $FilterRuleGroup->CheckFilterRules(
+            'Matches'         => $Matches,
+            'Actions'         => $Actions,
+            'From'            => $QueueFrom,
+            'To'              => $QueueTo,
+            'Ticket'          => $Action->TicketObj,
+            'IncludeDisabled' => 0
+        );
+    }
+
+    # Perform the actions we have accumulated.
+    #
+    foreach (@$Actions) {
+        $Package->PerformAction(
+            'Action' => $_,
+            'Ticket' => $Action->TicketObj
+        );
+    }
 
     return 1;
+}
+
+=head2 PerformAction Action => ACTION, Ticket => TICKET
+
+Perform the given action on the given ticket.
+
+(TODO)
+
+=cut
+
+sub PerformAction {
+    my $Package = shift;
+    my %args    = (
+        'Action' => undef,
+        'Ticket' => 0,
+        @_
+    );
+
+    # TODO: writeme
+
+    return (1, '');
 }
 
 {
@@ -373,6 +435,9 @@ I<Admin> - I<Tools> - I<Filter rule groups>.
     use RT::Transactions;
 
 =head1 RT::FilterRuleGroup METHODS
+
+Note that additional methods will be available, inherited from
+C<RT::Record>.
 
 =cut
 
@@ -777,68 +842,193 @@ below, overriding the B<FilterRuleGroup> parameter, and returns its output.
         );
     }
 
+=head2 SetDisabled BOOLEAN
+
+Mark this filter rule group as disabled if I<BOOLEAN> is true, or active if
+false.  Disabled filter rule groups are not considered when filtering
+events.
+
+=cut
+
+sub SetDisabled {
+    my $self = shift;
+    my $val  = shift;
+
+    return ( 1, $self->loc('No change made') )
+        if ( ( $self->Disabled && $val )
+        || ( ( not $val ) && ( not $self->Disabled ) ) );
+
+    $RT::Handle->BeginTransaction();
+    my ( $ok, $msg )
+        = $self->_Set( 'Field' => 'Disabled', 'Value' => $val ? 1 : 0 );
+    unless ($ok) {
+        $RT::Handle->Rollback();
+        return ( $ok, $msg );
+    }
+    $self->_NewTransaction( Type => ( $val == 0 ) ? 'Enabled' : 'Disabled' );
+
+    $RT::Handle->Commit();
+
+    if ( $val == 0 ) {
+        return ( 1, $self->loc('Filter rule group enabled') );
+    } else {
+        return ( 1, $self->loc('Filter rule group disabled') );
+    }
+}
+
 =head2 Delete
 
 Delete this filter rule group, and all of its filter rules.  Returns
 ( I<$ok>, I<$message> ).
 
-(TODO)
-
 =cut
 
     sub Delete {
         my ($self) = @_;
+        my ( $Collection, $Item );
 
-        # TODO: writeme
+        # Delete the group conditions.
+        #
+        $Collection = $self->GroupConditions();
+        $Collection->GotoFirstItem();
+        while ( $Item = $Collection->Next ) {
+            $Item->Delete();
+        }
+
+        # Delete the filter rules.
+        #
+        $Collection = $self->FilterRules();
+        $Collection->GotoFirstItem();
+        while ( $Item = $Collection->Next ) {
+            $Item->Delete();
+        }
+
+        # Delete the transactions.
+        #
+        $Collection = $self->Transactions();
+        $Collection->GotoFirstItem();
+        while ( $Item = $Collection->Next ) {
+            $Item->Delete();
+        }
+
+        # Delete this object itself.
+        #
+        return $self->SUPER::Delete();
     }
 
-=head2 CheckGroupConditions Matches => [], EVENT
+=head2 CheckGroupConditions Matches => [], TriggerType => ...,
 
 For the given event, append details of matching group conditions to the
 I<Matches> array reference.
+
+A I<Ticket> should be supplied, either as an ID or as an C<RT::Ticket> object.
 
 Returns true if there were any matches (meaning that the caller should pass
 the event through this filter rule group's B<FilterRules>), false if there
 were no matches.
 
-See B<CheckGroupConditions> for the structure of the I<Matches> array
-entries and the event structure.
+If I<IncludeDisabled> is true, then even rules marked as disabled will be
+checked.  The default is false.
 
-TODO
+See B<RT::FilterRule::Match> for the structure of the I<Matches> array
+entries, and the event structure.
 
 =cut
 
     sub CheckGroupConditions {
         my $self = shift;
-        my %args = (@_);
+        my %args = (
+            'Matches'     => [],
+            'TriggerType' => '',
+            'From'        => 0,
+            'To'          => 0,
+            'Ticket'      => 0,
+            'IncludeDisabled' => 0,
+            @_
+        );
+        my ( $Collection, $Item );
 
-        # TODO: define event format
-        # TODO: writeme
+        $Collection = $self->GroupConditions();
+        $Collection->Limit('FIELD' => 'Disabled', 'VALUE' => 0, 'OPERATOR' => '=') if (not $args{'IncludeDisabled'});
+        $Collection->GotoFirstItem();
+        while ( $Item = $Collection->Next ) {
+            return 1
+                if (
+                $Item->Match(
+                    'Matches'     => $args{'Matches'},
+                    'Actions'     => [],
+                    'TriggerType' => $args{'TriggerType'},
+                    'From'        => $args{'From'},
+                    'To'          => $args{'To'},
+                    'Ticket'      => $args{'Ticket'}
+                )
+                );
+        }
+
+        return 0;
     }
 
-=head2 CheckFilterRules Matches => [], Actions => [], EVENT
+=head2 CheckFilterRules Matches => [], Actions => [], TriggerType => ...,
 
 For the given event, append details of matching filter rules to the
 I<Matches> array reference, and append details of the actions which should
 be performed due to those matches to the I<Actions> array reference.
 
+A I<Ticket> should be supplied, either as an ID or as an C<RT::Ticket> object.
+
+If I<IncludeDisabled> is true, then even rules marked as disabled will be
+checked.  The default is false.
+
+If I<RecordMatch> is true, then the fact that a rule is matched will be
+recorded in the database (see C<RT::FilterRuleMatch>).  The default is not
+to record the match.
+
 Returns true if there were any matches, false otherwise.
 
-See B<RT::FilterRule::Match> for the structure of the I<Actions> array
-entries, and the event structure.
-
-TODO
+See B<RT::FilterRule::Match> for the structure of the I<Matches> and
+I<Actions> array entries, and the event structure.
 
 =cut
 
     sub CheckFilterRules {
         my $self = shift;
-        my %args = (@_);
+        my %args = (
+            'Matches'     => [],
+            'Actions'     => [],
+            'TriggerType' => '',
+            'From'        => 0,
+            'To'          => 0,
+            'Ticket'      => 0,
+            'IncludeDisabled' => 0,
+            'RecordMatch' => 0,
+            @_
+        );
+        my ( $Collection, $Item, $MatchesFound );
 
-        # TODO: define event format
-        # TODO: define match array format
-        # TODO: define action array format
-        # TODO: writeme
+        $MatchesFound = 0;
+
+        $Collection = $self->FilterRules();
+        $Collection->Limit('FIELD' => 'Disabled', 'VALUE' => 0, 'OPERATOR' => '=') if (not $args{'IncludeDisabled'});
+        $Collection->GotoFirstItem();
+        while ( $Item = $Collection->Next ) {
+            if ($Item->Match(
+                    'Matches'     => $args{'Matches'},
+                    'Actions'     => $args{'Actions'},
+                    'TriggerType' => $args{'TriggerType'},
+                    'From'        => $args{'From'},
+                    'To'          => $args{'To'},
+                    'Ticket'      => $args{'Ticket'}
+                )
+               )
+            {
+                $MatchesFound = 1;
+                $Item->RecordMatch('Ticket' => $args{'Ticket'})
+                if ($args{'RecordMatch'});
+                return 1 if ( $Item->StopIfMatched );
+            }
+        }
+
+        return $MatchesFound;
     }
 
 =head2 _Set Field => FIELD, Value => VALUE
@@ -1172,6 +1362,9 @@ property is true
 
 =head1 RT::FilterRule METHODS
 
+Note that additional methods will be available, inherited from
+C<RT::Record>.
+
 =cut
 
 =head2 Create Name => Name, ...
@@ -1200,7 +1393,12 @@ which will be undefined if there was a problem.
             @_
         );
 
-        # TODO: convert FilterRuleGroup from object to ID if necessary
+        # Convert FilterRuleGroup to an ID if an object was passed.
+        #
+        $args{'FilterRuleGroup'} = $args{'FilterRuleGroup'}->id
+            if ( ( ref $args{'FilterRuleGroup'} )
+            && UNIVERSAL::isa( $args{'FilterRuleGroup'}, 'RT::FilterRuleGroup' ) );
+
         # TODO: parse Conflicts, Requirements, Actions
 
         # Normalise IsGroupCondition to 1 or 0
@@ -1281,9 +1479,10 @@ Set the conditions which, if met, mean this rule cannot match (TODO: define form
         my ( $self, $NewValue ) = @_;
 
         # TODO: writeme
+        return (0, '');
     }
 
-=item SetRequirements
+=head2 SetRequirements
 
 Set the conditions which, if any are met, mean this rule matches, so long as
 none of the conflict conditions above have matched (TODO: define format).
@@ -1296,9 +1495,10 @@ none of the conflict conditions above have matched (TODO: define format).
         my ( $self, $NewValue ) = @_;
 
         # TODO: writeme
+        return (0, '');
     }
 
-=item SetActions
+=head2 SetActions
 
 Set the actions to carry out on the ticket if the rule matches; this field
 is unused for filter rule group applicability rules (where
@@ -1312,42 +1512,109 @@ B<IsGroupCondition> is 1) (TODO: define format).
         my ( $self, $NewValue ) = @_;
 
         # TODO: writeme
+        return (0, '');
     }
 
-=item Delete
+=head2 SetDisabled BOOLEAN
 
-Delete this filter rule and all of its history.
+Mark this filter rule as disabled if I<BOOLEAN> is true, or active if false. 
+Disabled filter rules are not considered when filtering events.
 
-(TODO)
+=cut
+
+sub SetDisabled {
+    my $self = shift;
+    my $val  = shift;
+
+    return ( 1, $self->loc('No change made') )
+        if ( ( $self->Disabled && $val )
+        || ( ( not $val ) && ( not $self->Disabled ) ) );
+
+    $RT::Handle->BeginTransaction();
+    my ( $ok, $msg )
+        = $self->_Set( 'Field' => 'Disabled', 'Value' => $val ? 1 : 0 );
+    unless ($ok) {
+        $RT::Handle->Rollback();
+        return ( $ok, $msg );
+    }
+    $self->_NewTransaction( Type => ( $val == 0 ) ? 'Enabled' : 'Disabled' );
+
+    $RT::Handle->Commit();
+
+    if ( $val == 0 ) {
+        return ( 1, $self->loc('Filter rule enabled') );
+    } else {
+        return ( 1, $self->loc('Filter rule disabled') );
+    }
+}
+
+=head2 Delete
+
+Delete this filter rule, and all of its history.  Returns ( I<$ok>,
+I<$message> ).
 
 =cut
 
     sub Delete {
         my ($self) = @_;
+        my ( $Collection, $Item );
 
-        # TODO: writeme
+        # Delete the filter rule match history.
+        #
+        $Collection = $self->MatchHistory();
+        $Collection->GotoFirstItem();
+        while ( $Item = $Collection->Next ) {
+            $Item->Delete();
+        }
+
+        # Delete the transactions.
+        #
+        $Collection = $self->Transactions();
+        $Collection->GotoFirstItem();
+        while ( $Item = $Collection->Next ) {
+            $Item->Delete();
+        }
+
+        # Delete this object itself.
+        #
+        return $self->SUPER::Delete();
     }
 
-=item MatchHistory
+=head2 MatchHistory
 
 Return an C<RT::FilterRuleMatches> collection containing all of the times
 this filter rule matched an event.
-
-(TODO)
 
 =cut
 
     sub MatchHistory {
         my ($self) = @_;
-
-        # TODO: writeme
+        my $Collection = RT::FilterRuleMatches->new( $self->CurrentUser );
+        $Collection->Limit(
+            'FIELD'    => 'FilterRule',
+            'VALUE'    => $self->id,
+            'OPERATOR' => '='
+        );
+        return $Collection;
     }
 
-=item Match Actions => [], EVENT
+=head2 Match Matches => [], Actions => [], TriggerType => TYPE, From => FROM, To => TO
 
 Return true if this filter rule matches the given event, false otherwise. 
-If returning true, the actions this rule contains will be appended to the
-I<Actions> array reference.
+If returning true, details of this rule and the matching condition will be
+appended to the I<Matches> array reference, and the actions this rule
+contains will be appended to the I<Actions> array reference.
+
+The I<TriggerType> should be one of the valid I<TriggerType> attribute
+values listed above in the C<RT::FilterRule> class attributes documentation.
+
+For a I<TriggerType> of B<Create>, indicating a ticket creation event, the
+I<To> parameter should be the ID of the queue the ticket was created in.
+
+For a I<TriggerType> of B<QueueMove>, indicating a ticket moving from one
+queue to another, the I<From> parameter should be the ID of the queue the
+ticket was in before the move, and the I<To> parameter should be the ID of
+the queue the ticket moved into.
 
 (TODO)
 
@@ -1355,25 +1622,37 @@ I<Actions> array reference.
 
     sub Match {
         my $self = shift;
-        my %args = (@_);
+        my %args = (
+            'Matches'     => [],
+            'Actions'     => [],
+            'TriggerType' => '',
+            'From'        => 0,
+            'To'          => 0,
+            @_
+        );
 
         # TODO: writeme
+
+        return 0;
     }
 
-=item RecordMatch Ticket => ID
+=head2 RecordMatch Ticket => ID
 
 Record the fact that an event relating to the given ticket matched this
 filter rule.
-
-(TODO)
 
 =cut
 
     sub RecordMatch {
         my $self = shift;
-        my %args = (@_);
+        my %args = ( 'Ticket' => 0, @_ );
 
-        # TODO: writeme
+        my $MatchObj = RT::FilterRuleMatch->new( $self->CurrentUser );
+
+        return $MatchObj->Create(
+            'FilterRule' => $self->id,
+            'Ticket'     => $args{'Ticket'}
+        );
     }
 
 =head2 _Set Field => FIELD, Value => VALUE
@@ -1676,6 +1955,9 @@ object via B<CreatedObj>)
     sub Table {'FilterRuleMatches'}
 
 =head1 RT::FilterRuleMatch METHODS
+
+Note that additional methods will be available, inherited from
+C<RT::Record>.
 
 =cut
 
