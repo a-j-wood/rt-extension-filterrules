@@ -122,6 +122,16 @@ actually do anything.
 
 =back
 
+=head1 TUTORIAL
+
+=head2 Setting up filter rule groups
+
+(TODO)
+
+=head2 Creating filter rules
+
+(TODO)
+
 =head1 AUTHOR
 
 Andrew Wood
@@ -306,8 +316,8 @@ unless this property is true
 
 The basic conditions of the filter rule group are defined by its
 B<GroupConditions> object, which is a collection of C<RT::FilterRule>
-objects whose sort order is zero.  If any of these rules match, the ticket
-is eligible to be passed through the rules for this group.
+objects whose B<IsGroupCondition> attribute is true.  If any of these rules
+match, the ticket is eligible to be passed through the rules for this group.
 
 The filter rules for this group presented via B<FilterRules>, which is a
 collection of C<RT::FilterRule> objects.
@@ -683,21 +693,27 @@ Returns ( I<$ok>, I<$message> ).
 =head2 GroupConditions
 
 Return an C<RT::FilterRules> collection object containing the conditions of
-this filter rule group - if an event meets any of these conditions are met,
-then the caller should process the event through the B<FilterRules> for this
-group.
-
-Note that the filter rules returned by this method all have a B<SortOrder>
-of 0, so can be checked in any order.
-
-(TODO)
+this filter rule group - if an event meets any of these conditions, then the
+caller should process the event through the B<FilterRules> for this group.
 
 =cut
 
     sub GroupConditions {
         my ($self) = @_;
 
-        # TODO: writeme
+        my $Collection = RT::FilterRules->new( $self->CurrentUser );
+        $Collection->Limit(
+            'FIELD'    => 'FilterRuleGroup',
+            'VALUE'    => $self->id,
+            'OPERATOR' => '='
+        );
+        $Collection->Limit(
+            'FIELD'    => 'IsGroupCondition',
+            'VALUE'    => 1,
+            'OPERATOR' => '='
+        );
+
+        return $Collection;
     }
 
 =head2 AddGroupCondition Name => NAME, ...
@@ -705,15 +721,17 @@ of 0, so can be checked in any order.
 Add a condition to this filter rule group; calls B<RT::FilterRule::Create>
 below, overriding the B<FilterRuleGroup> parameter, and returns its output.
 
-(TODO)
-
 =cut
 
     sub AddGroupCondition {
         my $self = shift;
-        my %args = ( @_ );
+        my %args = (@_);
 
-        # TODO: writeme
+        return RT::FilterRule->new(
+            $self->CurrentUser, %args,
+            'FilterRuleGroup'  => $self->id,
+            'IsGroupCondition' => 1
+        );
     }
 
 =head2 FilterRules
@@ -721,14 +739,24 @@ below, overriding the B<FilterRuleGroup> parameter, and returns its output.
 Return an C<RT::FilterRules> collection object containing the filter rules
 for this rule group.
 
-(TODO)
-
 =cut
 
     sub FilterRules {
         my ($self) = @_;
 
-        # TODO: writeme
+        my $Collection = RT::FilterRules->new( $self->CurrentUser );
+        $Collection->Limit(
+            'FIELD'    => 'FilterRuleGroup',
+            'VALUE'    => $self->id,
+            'OPERATOR' => '='
+        );
+        $Collection->Limit(
+            'FIELD'    => 'IsGroupCondition',
+            'VALUE'    => 0,
+            'OPERATOR' => '='
+        );
+
+        return $Collection;
     }
 
 =head2 AddFilterRule Name => NAME, ...
@@ -736,15 +764,17 @@ for this rule group.
 Add a filter rule to this filter rule group; calls B<RT::FilterRule::Create>
 below, overriding the B<FilterRuleGroup> parameter, and returns its output.
 
-(TODO)
-
 =cut
 
     sub AddFilterRule {
         my $self = shift;
         my %args = (@_);
 
-        # TODO: writeme
+        return RT::FilterRule->new(
+            $self->CurrentUser, %args,
+            'FilterRuleGroup'  => $self->id,
+            'IsGroupCondition' => 0
+        );
     }
 
 =head2 Delete
@@ -762,11 +792,17 @@ Delete this filter rule group, and all of its filter rules.  Returns
         # TODO: writeme
     }
 
-=head2 CheckGroupConditions EVENT
+=head2 CheckGroupConditions Matches => [], EVENT
 
-Return true if the given event matches any of the conditions for this filter
-rule group, meaning that the event should be passed through its
-B<FilterRules>, or false if it did not match.
+For the given event, append details of matching group conditions to the
+I<Matches> array reference.
+
+Returns true if there were any matches (meaning that the caller should pass
+the event through this filter rule group's B<FilterRules>), false if there
+were no matches.
+
+See B<CheckGroupConditions> for the structure of the I<Matches> array
+entries and the event structure.
 
 TODO
 
@@ -777,6 +813,31 @@ TODO
         my %args = (@_);
 
         # TODO: define event format
+        # TODO: writeme
+    }
+
+=head2 CheckFilterRules Matches => [], Actions => [], EVENT
+
+For the given event, append details of matching filter rules to the
+I<Matches> array reference, and append details of the actions which should
+be performed due to those matches to the I<Actions> array reference.
+
+Returns true if there were any matches, false otherwise.
+
+See B<RT::FilterRule::Match> for the structure of the I<Actions> array
+entries, and the event structure.
+
+TODO
+
+=cut
+
+    sub CheckFilterRules {
+        my $self = shift;
+        my %args = (@_);
+
+        # TODO: define event format
+        # TODO: define match array format
+        # TODO: define action array format
         # TODO: writeme
     }
 
@@ -1015,11 +1076,23 @@ The numeric ID of the filter rule group to which this filter rule belongs
 (also presented as an C<RT::FilterRuleGroup> object via
 B<FilterRuleGroupObj>)
 
+=item IsGroupCondition
+
+Whether this is a filter rule which describes conditions under which the
+filter rule group as a whole is applicable (true), or a filter rule for
+processing an event through and performing actions if matched (false).
+
+This is true for filter rules under a rule group's B<GroupConditions>, and
+false for filter rules under a rule group's B<FilterRules>.
+
+This attribute is set automatically when a C<RT::FilterRule> object is
+created via the B<AddGroupCondition> and B<AddFilterRule> methods of
+C<RT::FilterRuleGroup>.
+
 =item SortOrder
 
 The order of processing - filter rules with a lower sort order are processed
-first; a sort order of zero means that this filter rule is used to determine
-whether the whole filter rule group is applicable
+first
 
 =item Name
 
@@ -1058,8 +1131,8 @@ the conflict conditions above have matched (TODO: define format)
 =item Actions
 
 Actions to carry out on the ticket if the rule matches; this field is unused
-for filter rule group applicability rules (where B<SortOrder> is 0) (TODO:
-define format)
+for filter rule group applicability rules (where B<IsGroupCondition> is 1)
+(TODO: define format)
 
 =item Creator
 
@@ -1101,21 +1174,108 @@ property is true
 
 =cut
 
+=head2 Create Name => Name, ...
+
+Create a new filter rule with the supplied properties, as described above. 
+The sort order will be set to 1 more than the highest current value so that
+the new item appears at the end of the list.
+
+Returns ( I<$id>, I<$message> ), where I<$id> is the ID of the new object,
+which will be undefined if there was a problem.
+
+=cut
+
     sub Create {
         my $self = shift;
         my %args = (
-            'Name' => '',
+            'FilterRuleGroup'  => 0,
+            'IsGroupCondition' => 0,
+            'Name'             => '',
+            'TriggerType'      => '',
+            'StopIfMatched'    => 0,
+            'Conflicts'        => '',
+            'Requirements'     => '',
+            'Actions'          => '',
+            'Disabled'         => 0,
             @_
         );
 
-        # TODO: writeme
+        # TODO: convert FilterRuleGroup from object to ID if necessary
+        # TODO: parse Conflicts, Requirements, Actions
+
+        # Normalise IsGroupCondition to 1 or 0
+        $args{'IsGroupCondition'} = $args{'IsGroupCondition'} ? 1 : 0;
+
+        $args{'SortOrder'} = 1;
+
+        $RT::Handle->BeginTransaction();
+
+        my $AllFilterFules = RT::FilterRules->new( $self->CurrentUser );
+
+        $AllFilterRules->Limit(
+            'FIELD'    => 'FilterRuleGroup',
+            'VALUE'    => $args{'FilterRuleGroup'},
+            'OPERATOR' => '='
+        );
+        $AllFilterRules->Limit(
+            'FIELD'    => 'IsGroupCondition',
+            'VALUE'    => $args{'IsGroupCondition'},
+            'OPERATOR' => '='
+        );
+        $AllFilterRules->OrderByCols(
+            { FIELD => 'SortOrder', ORDER => 'DESC' } );
+        $AllFilterRules->GotoFirstItem();
+        my $FinalFilterRule = $AllFilterRules->Next;
+        $args{'SortOrder'} = 1 + $FinalFilterRule->SortOrder
+            if ($FinalFilterRule);
+
+        my ( $id, $msg ) = $self->SUPER::Create(%args);
+        unless ($id) {
+            $RT::Handle->Rollback();
+            return ( undef, $msg );
+        }
+
+        my ( $txn_id, $txn_msg, $txn )
+            = $self->_NewTransaction( Type => 'Create' );
+        unless ($txn_id) {
+            $RT::Handle->Rollback();
+            return ( undef, $self->loc( 'Internal error: [_1]', $txn_msg ) );
+        }
+        $RT::Handle->Commit();
+
+        return ( $id, $self->loc( 'Filter rule [_1] created', $self->id ) );
     }
+
+=head2 FilterRuleGroupObj
+
+Return an C<RT::FilterRuleGroup> object containing this filter rule's filter
+rule group.
+
+=cut
 
     sub FilterRuleGroupObj {
         my ($self) = @_;
 
-        # TODO: writeme
+        if (   !$self->{'_FilterRuleGroup_obj'}
+            || !$self->{'_FilterRuleGroup_obj'}->id )
+        {
+
+            $self->{'_FilterRuleGroup_obj'}
+                = RT::FilterRuleGroup->new( $self->CurrentUser );
+            my ($result)
+                = $self->{'_FilterRuleGroup_obj'}
+                ->Load( $self->__Value('FilterRuleGroup') );
+        }
+        return ( $self->{'_FilterRuleGroup_obj'} );
     }
+
+=head2 SetConflicts VALUE
+
+Set the conditions which, if met, mean this rule cannot match (TODO: define format).
+
+(TODO)
+
+=cut
 
     sub SetConflicts {
         my ( $self, $NewValue ) = @_;
@@ -1123,11 +1283,30 @@ property is true
         # TODO: writeme
     }
 
+=item SetRequirements
+
+Set the conditions which, if any are met, mean this rule matches, so long as
+none of the conflict conditions above have matched (TODO: define format).
+
+(TODO)
+
+=cut
+
     sub SetRequirements {
         my ( $self, $NewValue ) = @_;
 
         # TODO: writeme
     }
+
+=item SetActions
+
+Set the actions to carry out on the ticket if the rule matches; this field
+is unused for filter rule group applicability rules (where
+B<IsGroupCondition> is 1) (TODO: define format).
+
+(TODO)
+
+=cut
 
     sub SetActions {
         my ( $self, $NewValue ) = @_;
@@ -1135,17 +1314,44 @@ property is true
         # TODO: writeme
     }
 
+=item Delete
+
+Delete this filter rule and all of its history.
+
+(TODO)
+
+=cut
+
     sub Delete {
         my ($self) = @_;
 
         # TODO: writeme
     }
 
+=item MatchHistory
+
+Return an C<RT::FilterRuleMatches> collection containing all of the times
+this filter rule matched an event.
+
+(TODO)
+
+=cut
+
     sub MatchHistory {
         my ($self) = @_;
 
         # TODO: writeme
     }
+
+=item Match Actions => [], EVENT
+
+Return true if this filter rule matches the given event, false otherwise. 
+If returning true, the actions this rule contains will be appended to the
+I<Actions> array reference.
+
+(TODO)
+
+=cut
 
     sub Match {
         my $self = shift;
@@ -1154,6 +1360,15 @@ property is true
         # TODO: writeme
     }
 
+=item RecordMatch Ticket => ID
+
+Record the fact that an event relating to the given ticket matched this
+filter rule.
+
+(TODO)
+
+=cut
+
     sub RecordMatch {
         my $self = shift;
         my %args = (@_);
@@ -1161,10 +1376,58 @@ property is true
         # TODO: writeme
     }
 
-    sub PerformActions {
-        my ($self) = @_;
+=head2 _Set Field => FIELD, Value => VALUE
 
-        # TODO: writeme
+Set the value of a field, recording a transaction in the process if
+appropriate.  Returns ( I<$ok>, I<$message> ).
+
+=cut
+
+    sub _Set {
+        my $self = shift;
+        my %args = (
+            'Field' => '',
+            'Value' => '',
+            @_
+        );
+
+        my $OldValue = $self->__Value( $args{'Field'} );
+        return ( 1, $self->loc('No change made') )
+            if ( ( defined $OldValue )
+            && ( defined $args{'Value'} )
+            && ( $Oldvalue eq $args{'Value'} ) );
+
+        $RT::Handle->BeginTransaction();
+
+        my ( $ok, $msg ) = $self->SUPER::_Set(%args);
+
+        if ( not $ok ) {
+            $RT::Handle->Rollback();
+            return ( $ok, $msg );
+        }
+
+        # Don't record a transaction for sort order changes, since they are
+        # very frequent.
+        #
+        # TODO: special "Type" for Conflicts, Requirements, Actions, with
+        # matching %RT::Transaction::_BriefDescription entries.
+        #
+        if ( ( $args{'Field'} || '' ) ne 'SortOrder' ) {
+            my ( $txn_id, $txn_msg, $txn ) = $self->_NewTransaction(
+                'Type'     => 'Set',
+                'Field'    => $args{'Field'},
+                'NewValue' => $args{'Value'},
+                'OldValue' => $OldValue
+            );
+            if ( not $txn_id ) {
+                $RT::Handle->Rollback();
+                return ( 0, $self->loc( 'Internal error: [_1]', $txn_msg ) );
+            }
+        }
+
+        $RT::Handle->Commit();
+
+        return ( $ok, $msg );
     }
 
 =head2 _CoreAccessible
@@ -1195,6 +1458,17 @@ C<RT::FilterRule> class.
                 is_blob    => 0,
                 is_numeric => 1,
                 type       => 'int(11)',
+                default    => '0'
+            },
+
+            'IsGroupCondition' => {
+                read       => 1,
+                write      => 1,
+                sql_type   => 5,
+                length     => 6,
+                is_blob    => 0,
+                is_numeric => 1,
+                type       => 'smallint(6)',
                 default    => '0'
             },
 
@@ -1240,9 +1514,9 @@ C<RT::FilterRule> class.
                 is_numeric => 1,
                 type       => 'smallint(6)',
                 default    => '0'
-                }
+            },
 
-                'Conflicts' => {
+            'Conflicts' => {
                 read       => 1,
                 write      => 1,
                 sql_type   => -4,
@@ -1251,7 +1525,7 @@ C<RT::FilterRule> class.
                 is_numeric => 0,
                 type       => 'text',
                 default    => ''
-                },
+            },
 
             'Requirements' => {
                 read       => 1,
@@ -1405,6 +1679,17 @@ object via B<CreatedObj>)
 
 =cut
 
+=head2 Create FilterRule => ID, Ticket => ID
+
+Create a new filter rule match object with the supplied properties, as
+described above.  The I<FilterRule> and I<Ticket> can be passed as integer
+IDs or as C<RT::FilterRule> and C<RT::Ticket> objects.
+
+Returns ( I<$id>, I<$message> ), where I<$id> is the ID of the new object,
+which will be undefined if there was a problem.
+
+=cut
+
     sub Create {
         my $self = shift;
         my %args = (
@@ -1413,19 +1698,67 @@ object via B<CreatedObj>)
             @_
         );
 
-        # TODO: writeme
+        $args{'FilterRule'} = $args{'FilterRule'}->id
+            if ( ( ref $args{'FilterRule'} )
+            && UNIVERSAL::isa( $args{'FilterRule'}, 'RT::FilterRule' ) );
+        $args{'Ticket'} = $args{'Ticket'}->id
+            if ( ( ref $args{'Ticket'} )
+            && UNIVERSAL::isa( $args{'Ticket'}, 'RT::Ticket' ) );
+
+        $RT::Handle->BeginTransaction();
+        my ( $id, $msg ) = $self->SUPER::Create(%args);
+        unless ($id) {
+            $RT::Handle->Rollback();
+            return ( undef, $msg );
+        }
+        $RT::Handle->Commit();
+
+        return ( $id,
+            $self->loc( 'Filter rule match [_1] created', $self->id ) );
     }
+
+=head2 FilterRuleObj
+
+Return an C<RT::FilterRule> object containing this filter rule match's
+matching filter rule.
+
+=cut
 
     sub FilterRuleObj {
         my ($self) = @_;
 
-        # TODO: writeme
+        if (   !$self->{'_FilterRule_obj'}
+            || !$self->{'_FilterRule_obj'}->id )
+        {
+
+            $self->{'_FilterRule_obj'}
+                = RT::FilterRule->new( $self->CurrentUser );
+            my ($result)
+                = $self->{'_FilterRule_obj'}
+                ->Load( $self->__Value('FilterRule') );
+        }
+        return ( $self->{'_FilterRule_obj'} );
     }
+
+=head2 TicketObj
+
+Return an C<RT::Ticket> object containing this filter rule match's matching
+ticket.
+
+=cut
 
     sub TicketObj {
         my ($self) = @_;
 
-        # TODO: writeme
+        if (   !$self->{'_Ticket_obj'}
+            || !$self->{'_Ticket_obj'}->id )
+        {
+
+            $self->{'_Ticket_obj'} = RT::Ticket->new( $self->CurrentUser );
+            my ($result)
+                = $self->{'_Ticket_obj'}->Load( $self->__Value('Ticket') );
+        }
+        return ( $self->{'_Ticket_obj'} );
     }
 
 =head2 _CoreAccessible

@@ -18,6 +18,7 @@ CREATE INDEX FilterRuleGroups1 ON FilterRuleGroups (SortOrder);
 CREATE TABLE FilterRules (
   id INTEGER NOT NULL AUTO_INCREMENT,
   FilterRuleGroup INTEGER NOT NULL DEFAULT 0,
+  IsGroupCondition int2 NOT NULL DEFAULT 0,
   SortOrder INTEGER NOT NULL DEFAULT 0,
   Name VARCHAR(200) NOT NULL,
   TriggerType VARCHAR(200) NOT NULL,
