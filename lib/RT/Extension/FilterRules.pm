@@ -112,8 +112,8 @@ later remove this extension without disabling the scrip.
 
 =item Set up some filter rule groups
 
-Rule groups are set up by the RT administrator under I<Admin> - I<Tools> -
-I<Filter rule groups>.
+Rule groups are set up by the RT administrator under I<Admin> - I<Filter
+rule groups>.
 
 From that page, the RT administrator can also automatically create the
 general processing scrip which runs tickets through the filter rules.
@@ -303,7 +303,7 @@ sub PerformAction {
 
     # TODO: writeme
 
-    return (1, '');
+    return ( 1, '' );
 }
 
 {
@@ -411,7 +411,7 @@ Delete filter rules from this filter rule group
 =back
 
 These are assigned using the rights pages of the filter rule group, under
-I<Admin> - I<Tools> - I<Filter rule groups>.
+I<Admin> - I<Filter rule groups>.
 
 =cut
 
@@ -767,6 +767,7 @@ caller should process the event through the B<FilterRules> for this group.
         my ($self) = @_;
 
         my $Collection = RT::FilterRules->new( $self->CurrentUser );
+        $Collection->UnLimit();
         $Collection->Limit(
             'FIELD'    => 'FilterRuleGroup',
             'VALUE'    => $self->id,
@@ -810,6 +811,7 @@ for this rule group.
         my ($self) = @_;
 
         my $Collection = RT::FilterRules->new( $self->CurrentUser );
+        $Collection->UnLimit();
         $Collection->Limit(
             'FIELD'    => 'FilterRuleGroup',
             'VALUE'    => $self->id,
@@ -842,40 +844,6 @@ below, overriding the B<FilterRuleGroup> parameter, and returns its output.
         );
     }
 
-=head2 SetDisabled BOOLEAN
-
-Mark this filter rule group as disabled if I<BOOLEAN> is true, or active if
-false.  Disabled filter rule groups are not considered when filtering
-events.
-
-=cut
-
-sub SetDisabled {
-    my $self = shift;
-    my $val  = shift;
-
-    return ( 1, $self->loc('No change made') )
-        if ( ( $self->Disabled && $val )
-        || ( ( not $val ) && ( not $self->Disabled ) ) );
-
-    $RT::Handle->BeginTransaction();
-    my ( $ok, $msg )
-        = $self->_Set( 'Field' => 'Disabled', 'Value' => $val ? 1 : 0 );
-    unless ($ok) {
-        $RT::Handle->Rollback();
-        return ( $ok, $msg );
-    }
-    $self->_NewTransaction( Type => ( $val == 0 ) ? 'Enabled' : 'Disabled' );
-
-    $RT::Handle->Commit();
-
-    if ( $val == 0 ) {
-        return ( 1, $self->loc('Filter rule group enabled') );
-    } else {
-        return ( 1, $self->loc('Filter rule group disabled') );
-    }
-}
-
 =head2 Delete
 
 Delete this filter rule group, and all of its filter rules.  Returns
@@ -890,6 +858,7 @@ Delete this filter rule group, and all of its filter rules.  Returns
         # Delete the group conditions.
         #
         $Collection = $self->GroupConditions();
+        $Collection->FindAllRows();
         $Collection->GotoFirstItem();
         while ( $Item = $Collection->Next ) {
             $Item->Delete();
@@ -898,6 +867,7 @@ Delete this filter rule group, and all of its filter rules.  Returns
         # Delete the filter rules.
         #
         $Collection = $self->FilterRules();
+        $Collection->FindAllRows();
         $Collection->GotoFirstItem();
         while ( $Item = $Collection->Next ) {
             $Item->Delete();
@@ -938,18 +908,23 @@ entries, and the event structure.
     sub CheckGroupConditions {
         my $self = shift;
         my %args = (
-            'Matches'     => [],
-            'TriggerType' => '',
-            'From'        => 0,
-            'To'          => 0,
-            'Ticket'      => 0,
+            'Matches'         => [],
+            'TriggerType'     => '',
+            'From'            => 0,
+            'To'              => 0,
+            'Ticket'          => 0,
             'IncludeDisabled' => 0,
             @_
         );
         my ( $Collection, $Item );
 
         $Collection = $self->GroupConditions();
-        $Collection->Limit('FIELD' => 'Disabled', 'VALUE' => 0, 'OPERATOR' => '=') if (not $args{'IncludeDisabled'});
+        $Collection->FindAllRows();
+        $Collection->Limit(
+            'FIELD'    => 'Disabled',
+            'VALUE'    => 0,
+            'OPERATOR' => '='
+        ) if ( not $args{'IncludeDisabled'} );
         $Collection->GotoFirstItem();
         while ( $Item = $Collection->Next ) {
             return 1
@@ -993,14 +968,14 @@ I<Actions> array entries, and the event structure.
     sub CheckFilterRules {
         my $self = shift;
         my %args = (
-            'Matches'     => [],
-            'Actions'     => [],
-            'TriggerType' => '',
-            'From'        => 0,
-            'To'          => 0,
-            'Ticket'      => 0,
+            'Matches'         => [],
+            'Actions'         => [],
+            'TriggerType'     => '',
+            'From'            => 0,
+            'To'              => 0,
+            'Ticket'          => 0,
             'IncludeDisabled' => 0,
-            'RecordMatch' => 0,
+            'RecordMatch'     => 0,
             @_
         );
         my ( $Collection, $Item, $MatchesFound );
@@ -1008,8 +983,14 @@ I<Actions> array entries, and the event structure.
         $MatchesFound = 0;
 
         $Collection = $self->FilterRules();
-        $Collection->Limit('FIELD' => 'Disabled', 'VALUE' => 0, 'OPERATOR' => '=') if (not $args{'IncludeDisabled'});
+        $Collection->FindAllRows();
+        $Collection->Limit(
+            'FIELD'    => 'Disabled',
+            'VALUE'    => 0,
+            'OPERATOR' => '='
+        ) if ( not $args{'IncludeDisabled'} );
         $Collection->GotoFirstItem();
+
         while ( $Item = $Collection->Next ) {
             if ($Item->Match(
                     'Matches'     => $args{'Matches'},
@@ -1022,13 +1003,87 @@ I<Actions> array entries, and the event structure.
                )
             {
                 $MatchesFound = 1;
-                $Item->RecordMatch('Ticket' => $args{'Ticket'})
-                if ($args{'RecordMatch'});
+                $Item->RecordMatch( 'Ticket' => $args{'Ticket'} )
+                    if ( $args{'RecordMatch'} );
                 return 1 if ( $Item->StopIfMatched );
             }
         }
 
         return $MatchesFound;
+    }
+
+=head2 MoveUp
+
+Move this filter rule group up in the sort order so it is processed earlier. 
+Returns ( I<$ok>, I<$message> ).
+
+=cut
+
+    sub MoveUp {
+        my $self = shift;
+        return $self->Move(-1);
+    }
+
+=head2 MoveDown
+
+Move this filter rule group down in the sort order so it is processed later. 
+Returns ( I<$ok>, I<$message> ).
+
+=cut
+
+    sub MoveDown {
+        my $self = shift;
+        return $self->Move(1);
+    }
+
+=head2 Move OFFSET
+
+Change this filter rule group's sort order by the given I<OFFSET>.
+
+=cut
+
+    sub Move {
+        my ( $self, $Offset ) = @_;
+
+        return ( 1, $self->loc('Not moved') ) if ( $Offset == 0 );
+
+        my $Collection = RT::FilterRuleGroups->new( $self->CurrentUser );
+        $Collection->UnLimit();
+        $Collection->FindAllRows();
+        $Collection->OrderByCols( { FIELD => 'SortOrder', ORDER => 'ASC' } );
+        $Collection->GotoFirstItem();
+        my @CollectionOrder = ();
+        while ( my $Item = $Collection->Next ) {
+            push @CollectionOrder, { 'Object' => $Item, 'id' => $Item->id };
+        }
+
+        my $SelfId          = $self->id;
+        my $CurrentPosition = -1;
+        for ( my $Index = 0; $Index <= $#CollectionOrder; $Index++ ) {
+            next if ( $CollectionOrder[$Index]->{'id'} != $SelfId );
+            $CurrentPosition = $Index;
+        }
+        return ( 0, $self->loc('Failed to find current position') )
+            if ( $CurrentPosition < 0 );
+
+        my $NewPosition = $CurrentPosition + $Offset;
+        if ( $NewPosition < 0 ) {
+            return ( 0,
+                $self->loc("Can not move up. It's already at the top") );
+        } elsif ( $NewPosition > $#CollectionOrder ) {
+            return ( 0,
+                $self->loc("Can not move down. It's already at the bottom") );
+        }
+
+        my $Swap = $CollectionOrder[$CurrentPosition];
+        $CollectionOrder[$CurrentPosition] = $CollectionOrder[$NewPosition];
+        $CollectionOrder[$NewPosition]     = $Swap;
+
+        for ( my $Index = 0; $Index <= $#CollectionOrder; $Index++ ) {
+            $CollectionOrder[$Index]->{'Object'}->SetSortOrder( 1 + $Index );
+        }
+
+        return ( 1, $self->loc('Moved') );
     }
 
 =head2 _Set Field => FIELD, Value => VALUE
@@ -1061,10 +1116,18 @@ appropriate.  Returns ( I<$ok>, I<$message> ).
             return ( $ok, $msg );
         }
 
-        # Don't record a transaction for sort order changes, since they are
-        # very frequent.
+        # NB we don't record a transaction for sort order changes, since
+        # they are very frequent.
         #
-        if ( ( $args{'Field'} || '' ) ne 'SortOrder' ) {
+        if ( ( $args{'Field'} || '' ) eq 'Disabled' ) {
+            my ( $txn_id, $txn_msg, $txn )
+                = $self->_NewTransaction(
+                Type => $args{'Value'} ? 'Disabled' : 'Enabled' );
+            if ( not $txn_id ) {
+                $RT::Handle->Rollback();
+                return ( 0, $self->loc( 'Internal error: [_1]', $txn_msg ) );
+            }
+        } elsif ( ( $args{'Field'} || '' ) ne 'SortOrder' ) {
             my ( $txn_id, $txn_msg, $txn ) = $self->_NewTransaction(
                 'Type'     => 'Set',
                 'Field'    => $args{'Field'},
@@ -1080,6 +1143,17 @@ appropriate.  Returns ( I<$ok>, I<$message> ).
         $RT::Handle->Commit();
 
         return ( $ok, $msg );
+    }
+
+=head2 CurrentUserCanSee
+
+Return true if the current user has permission to see this object.
+
+=cut
+
+    sub CurrentUserCanSee {
+        my $self = shift;
+        return $self->CurrentUserHasRight('SuperUser');
     }
 
 =head2 _CoreAccessible
@@ -1234,10 +1308,7 @@ collection of filter rule groups.
 
     sub _Init {
         my $self = shift;
-        $self->OrderByCols(
-            { FIELD => 'SortOrder', ORDER => 'ASC' },
-            { FIELD => 'Name',      ORDER => 'ASC' },
-        );
+        $self->OrderByCols( { FIELD => 'SortOrder', ORDER => 'ASC' } );
         return $self->SUPER::_Init(@_);
     }
 
@@ -1397,7 +1468,8 @@ which will be undefined if there was a problem.
         #
         $args{'FilterRuleGroup'} = $args{'FilterRuleGroup'}->id
             if ( ( ref $args{'FilterRuleGroup'} )
-            && UNIVERSAL::isa( $args{'FilterRuleGroup'}, 'RT::FilterRuleGroup' ) );
+            && UNIVERSAL::isa( $args{'FilterRuleGroup'},
+                'RT::FilterRuleGroup' ) );
 
         # TODO: parse Conflicts, Requirements, Actions
 
@@ -1479,7 +1551,7 @@ Set the conditions which, if met, mean this rule cannot match (TODO: define form
         my ( $self, $NewValue ) = @_;
 
         # TODO: writeme
-        return (0, '');
+        return ( 0, '' );
     }
 
 =head2 SetRequirements
@@ -1495,7 +1567,7 @@ none of the conflict conditions above have matched (TODO: define format).
         my ( $self, $NewValue ) = @_;
 
         # TODO: writeme
-        return (0, '');
+        return ( 0, '' );
     }
 
 =head2 SetActions
@@ -1512,41 +1584,8 @@ B<IsGroupCondition> is 1) (TODO: define format).
         my ( $self, $NewValue ) = @_;
 
         # TODO: writeme
-        return (0, '');
+        return ( 0, '' );
     }
-
-=head2 SetDisabled BOOLEAN
-
-Mark this filter rule as disabled if I<BOOLEAN> is true, or active if false. 
-Disabled filter rules are not considered when filtering events.
-
-=cut
-
-sub SetDisabled {
-    my $self = shift;
-    my $val  = shift;
-
-    return ( 1, $self->loc('No change made') )
-        if ( ( $self->Disabled && $val )
-        || ( ( not $val ) && ( not $self->Disabled ) ) );
-
-    $RT::Handle->BeginTransaction();
-    my ( $ok, $msg )
-        = $self->_Set( 'Field' => 'Disabled', 'Value' => $val ? 1 : 0 );
-    unless ($ok) {
-        $RT::Handle->Rollback();
-        return ( $ok, $msg );
-    }
-    $self->_NewTransaction( Type => ( $val == 0 ) ? 'Enabled' : 'Disabled' );
-
-    $RT::Handle->Commit();
-
-    if ( $val == 0 ) {
-        return ( 1, $self->loc('Filter rule enabled') );
-    } else {
-        return ( 1, $self->loc('Filter rule disabled') );
-    }
-}
 
 =head2 Delete
 
@@ -1655,6 +1694,91 @@ filter rule.
         );
     }
 
+=head2 MoveUp
+
+Move this filter rule up in the sort order so it is processed earlier. 
+Returns ( I<$ok>, I<$message> ).
+
+=cut
+
+    sub MoveUp {
+        my $self = shift;
+        return $self->Move(-1);
+    }
+
+=head2 MoveDown
+
+Move this filter rule down in the sort order so it is processed later. 
+Returns ( I<$ok>, I<$message> ).
+
+=cut
+
+    sub MoveDown {
+        my $self = shift;
+        return $self->Move(1);
+    }
+
+=head2 Move OFFSET
+
+Change this filter rule's sort order by the given I<OFFSET>.
+
+=cut
+
+    sub Move {
+        my ( $self, $Offset ) = @_;
+
+        return ( 1, $self->loc('Not moved') ) if ( $Offset == 0 );
+
+        my $Collection = RT::FilterRules->new( $self->CurrentUser );
+        $Collection->UnLimit();
+        $Collection->Limit(
+            'FIELD'    => 'FilterRuleGroup',
+            'VALUE'    => $self->FilterRuleGroup,
+            'OPERATOR' => '='
+        );
+        $Collection->Limit(
+            'FIELD'    => 'IsGroupCondition',
+            'VALUE'    => $self->IsGroupCondition,
+            'OPERATOR' => '='
+        );
+        $Collection->FindAllRows();
+        $Collection->OrderByCols( { FIELD => 'SortOrder', ORDER => 'ASC' } );
+        $Collection->GotoFirstItem();
+        my @CollectionOrder = ();
+
+        while ( my $Item = $Collection->Next ) {
+            push @CollectionOrder, { 'Object' => $Item, 'id' => $Item->id };
+        }
+
+        my $SelfId          = $self->id;
+        my $CurrentPosition = -1;
+        for ( my $Index = 0; $Index <= $#CollectionOrder; $Index++ ) {
+            next if ( $CollectionOrder[$Index]->{'id'} != $SelfId );
+            $CurrentPosition = $Index;
+        }
+        return ( 0, $self->loc('Failed to find current position') )
+            if ( $CurrentPosition < 0 );
+
+        my $NewPosition = $CurrentPosition + $Offset;
+        if ( $NewPosition < 0 ) {
+            return ( 0,
+                $self->loc("Can not move up. It's already at the top") );
+        } elsif ( $NewPosition > $#CollectionOrder ) {
+            return ( 0,
+                $self->loc("Can not move down. It's already at the bottom") );
+        }
+
+        my $Swap = $CollectionOrder[$CurrentPosition];
+        $CollectionOrder[$CurrentPosition] = $CollectionOrder[$NewPosition];
+        $CollectionOrder[$NewPosition]     = $Swap;
+
+        for ( my $Index = 0; $Index <= $#CollectionOrder; $Index++ ) {
+            $CollectionOrder[$Index]->{'Object'}->SetSortOrder( 1 + $Index );
+        }
+
+        return ( 1, $self->loc('Moved') );
+    }
+
 =head2 _Set Field => FIELD, Value => VALUE
 
 Set the value of a field, recording a transaction in the process if
@@ -1691,7 +1815,15 @@ appropriate.  Returns ( I<$ok>, I<$message> ).
         # TODO: special "Type" for Conflicts, Requirements, Actions, with
         # matching %RT::Transaction::_BriefDescription entries.
         #
-        if ( ( $args{'Field'} || '' ) ne 'SortOrder' ) {
+        if ( ( $args{'Field'} || '' ) eq 'Disabled' ) {
+            my ( $txn_id, $txn_msg, $txn )
+                = $self->_NewTransaction(
+                Type => $args{'Value'} ? 'Disabled' : 'Enabled' );
+            if ( not $txn_id ) {
+                $RT::Handle->Rollback();
+                return ( 0, $self->loc( 'Internal error: [_1]', $txn_msg ) );
+            }
+        } elsif ( ( $args{'Field'} || '' ) ne 'SortOrder' ) {
             my ( $txn_id, $txn_msg, $txn ) = $self->_NewTransaction(
                 'Type'     => 'Set',
                 'Field'    => $args{'Field'},
@@ -1707,6 +1839,38 @@ appropriate.  Returns ( I<$ok>, I<$message> ).
         $RT::Handle->Commit();
 
         return ( $ok, $msg );
+    }
+
+=head2 CurrentUserCanSee
+
+Return true if the current user has permission to see this object.
+
+=cut
+
+    sub CurrentUserCanSee {
+        my $self = shift;
+        return 1
+            if (
+            $self->FilterRuleGroupObj->CurrentUserHasRight('SuperUser') );
+        return 1
+            if (
+            $self->FilterRuleGroupObj->CurrentUserHasRight('SeeFilterRule') );
+        return 1
+            if (
+            $self->FilterRuleGroupObj->CurrentUserHasRight(
+                'ModifyFilterRule')
+               );
+        return 1
+            if (
+            $self->FilterRuleGroupObj->CurrentUserHasRight(
+                'CreateFilterRule')
+               );
+        return 1
+            if (
+            $self->FilterRuleGroupObj->CurrentUserHasRight(
+                'DeleteFilterRule')
+               );
+        return 0;
     }
 
 =head2 _CoreAccessible
@@ -1905,10 +2069,7 @@ collection of filter rules.
 
     sub _Init {
         my $self = shift;
-        $self->OrderByCols(
-            { FIELD => 'SortOrder', ORDER => 'ASC' },
-            { FIELD => 'Name',      ORDER => 'ASC' },
-        );
+        $self->OrderByCols( { FIELD => 'SortOrder', ORDER => 'ASC' } );
         return $self->SUPER::_Init(@_);
     }
 
