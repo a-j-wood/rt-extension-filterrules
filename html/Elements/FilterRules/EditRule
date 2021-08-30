@@ -1,0 +1,22 @@
+<%doc>
+Allow a filter rule to be edited.
+
+  FilterRuleGroup - RT::FilterRuleGroup object containing the rules
+  FilterRule - RT::FilterRule object for this rule, undef if creating new
+  Edit - which type of rule to edit - "GroupConditions" or "FilterRules"
+  Page - URL of page this element is on, to post the form to
+
+TODO: writeme
+</%doc>
+\
+<%ARGS>
+$FilterRuleGroup => undef
+$FilterRule => undef
+$Edit => 'GroupConditions'
+$Page => undef
+</%ARGS>
+\
+<%INIT>
+</%INIT>
+
+TODO

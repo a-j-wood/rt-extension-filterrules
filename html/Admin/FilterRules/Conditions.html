@@ -4,6 +4,7 @@ Allow the conditions of a filter rule group to be modified.
 \
 <%ARGS>
 $id => undef
+$Rule => undef
 </%ARGS>
 \
 <%INIT>
@@ -12,16 +13,33 @@ unless ( $session{'CurrentUser'}
 {
     Abort( loc('This feature is only available to system administrators.') );
 }
-my $Object = RT::FilterRuleGroup->new( $session{'CurrentUser'} );
-$Object->Load($id) || Abort("Couldn't load filter rule group '$id'");
-my $Title = loc( 'Conditions of the filter rule group [_1]', $Object->Name );
+
+my $FilterRuleGroup = RT::FilterRuleGroup->new( $session{'CurrentUser'} );
+$FilterRuleGroup->Load($id) || Abort("Couldn't load filter rule group '$id'");
+my $Title = loc( 'Conditions of the filter rule group [_1]',
+    $FilterRuleGroup->Name );
+
+my $FilterRule = undef;
+if ($Rule) {
+    $FilterRule = RT::FilterRule->new( $session{'CurrentUser'} );
+    $FilterRule->Load($Rule) || Abort("Couldn't load filter rule '$Rule'");
+    if ( $FilterRule->FilterRuleObj->id != $id ) {
+        Abort("Filter rule '$Rule' is not part of filter rule group '$id'");
+    }
+}
+
 my @Results = ();
+
+# TODO: writeme
+
 </%INIT>
 \
 <& /Admin/Elements/Header, Title => $Title  &>
 <& /Elements/Tabs &>
 <& /Elements/ListActions, actions => \@Results &>
 
-<p>
-TODO: writeme
-</p>
+% if ($Rule) {
+<& /Elements/FilterRules/EditRule, FilterRuleGroup => $FilterRuleGroup, FilterRule => $FilterRule, Edit => 'GroupConditions', Page => 'Conditions.html' &>
+% } else {
+<& /Elements/FilterRules/ShowRules, FilterRuleGroup => $FilterRuleGroup, Edit => 'GroupConditions', Page => 'Conditions.html' &>
+% }

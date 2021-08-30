@@ -1,0 +1,21 @@
+<%doc>
+Display the given list of filter rules, possibly allowing them to be edited
+and moved.
+
+  FilterRuleGroup - RT::FilterRuleGroup object containing the rules
+  Edit - which type of rules to list - "GroupConditions" or "FilterRules"
+  Page - URL of page this element is on, to post the form to
+
+TODO: writeme
+</%doc>
+\
+<%ARGS>
+$FilterRuleGroup => undef
+$Edit => 'GroupConditions'
+$Page => undef
+</%ARGS>
+\
+<%INIT>
+</%INIT>
+
+TODO
