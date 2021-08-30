@@ -5,6 +5,10 @@ package RT::Extension::FilterRules;
 
 our $VERSION = '0.01';
 
+our @ConditionProviders = ();
+our @ActionProviders = ();
+
+
 =head1 NAME
 
 RT::Extension::FilterRules - Filter incoming tickets through rule sets
@@ -445,15 +449,156 @@ sub ScripCommit {
 Return an array of all available condition types, with the names localised
 for the given user.
 
-(TODO)
+Each array entry is a hash reference containing these keys:
+
+=over 18
+
+=item B<ConditionType>
+
+The internal name for this condition type; this should follow the naming
+convention for variables - start with a letter, no spaces, and so on - and
+it must be unique
+
+=item B<Name>
+
+Localised name, to be displayed to the operator
+
+=item B<TriggerTypes>
+
+Array reference listing the trigger actions with which this condition can be
+used (as listed under the I<TriggerType> attribute of the C<RT::FilterRule>
+class below), or an empty array reference (or undef) if this condition type
+can be used with all trigger types
+
+=item B<ValueType>
+
+Which type of value the condition expects as a parameter - one of
+I<None>, I<String>, I<Integer>, I<Email>, I<Queue>, or I<Status>
+
+=item B<Function>
+
+If present, this is a code reference which will be called to check this
+condition; this code reference will be passed a hash of the parameters from
+inside an C<RT::FilterRule::Condition> object, plus I<Check>, as it will be
+called from the B<TestSingleValue> method of C<RT::FilterRule::Condition>
+
+=back
+
+If I<Function> is not present, the B<TestSingleValue> method of
+C<RT::FilterRule::Condition> will attempt to call an
+C<RT::FilterRule::Condition> method of the same name as I<ConditionType>
+with C<_> prepended, returning a failed match (and logging an error) if such
+a method does not exist.
+
+Note that if I<ConditionType> contains the string C<CustomField>, then the
+condition will require the person creating the condition to select an
+applicable custom field.
 
 =cut
 
 sub ConditionTypes {
     my ( $Package, $UserObj ) = @_;
+    my @ConditionTypes = ();
 
-    # TODO: writeme
-    return ();
+    push @ConditionTypes,
+        (
+        {   'ConditionType' => 'All',
+            'Name'          => $UserObj->loc('Always match'),
+            'TriggerTypes'  => [],
+            'ValueType'     => 'None'
+        },
+        {   'ConditionType' => 'InQueue',
+            'Name'          => $UserObj->loc('In queue'),
+            'TriggerTypes'  => ['Create'],
+            'ValueType'     => 'Queue'
+        },
+        {   'ConditionType' => 'FromQueue',
+            'Name'          => $UserObj->loc('Moving from queue'),
+            'TriggerTypes'  => ['QueueMove'],
+            'ValueType'     => 'Queue'
+        },
+        {   'ConditionType' => 'ToQueue',
+            'Name'          => $UserObj->loc('Moving to queue'),
+            'TriggerTypes'  => ['QueueMove'],
+            'ValueType'     => 'Queue'
+        },
+        {   'ConditionType' => 'RequestorEmailIs',
+            'Name'          => $UserObj->loc('Requestor email address is'),
+            'TriggerTypes'  => [],
+            'ValueType'     => 'Email'
+        },
+        {   'ConditionType' => 'RequestorEmailDomainIs',
+            'Name'          => $UserObj->loc('Requestor email domain is'),
+            'TriggerTypes'  => [],
+            'ValueType'     => 'String'
+        },
+        {   'ConditionType' => 'RecipientEmailIs',
+            'Name'          => $UserObj->loc('Recipient email address is'),
+            'TriggerTypes'  => ['Create'],
+            'ValueType'     => 'Email'
+        },
+        {   'ConditionType' => 'SubjectContains',
+            'Name'          => $UserObj->loc('Subject contains'),
+            'TriggerTypes'  => [],
+            'ValueType'     => 'String'
+        },
+        {   'ConditionType' => 'SubjectOrBodyContains',
+            'Name' => $UserObj->loc('Subject or message body contains'),
+            'TriggerTypes' => [],
+            'ValueType'    => 'String'
+        },
+        {   'ConditionType' => 'BodyContains',
+            'Name'          => $UserObj->loc('Message body contains'),
+            'TriggerTypes'  => [],
+            'ValueType'     => 'String'
+        },
+        {   'ConditionType' => 'HeaderContains',
+            'Name'          => $UserObj->loc('Any message header contains'),
+            'TriggerTypes'  => ['Create'],
+            'ValueType'     => 'String'
+        },
+        {   'ConditionType' => 'HasAttachment',
+            'Name'          => $UserObj->loc('Has an attachment'),
+            'TriggerTypes'  => ['Create'],
+            'ValueType'     => 'None'
+        },
+        {   'ConditionType' => 'PriorityIs',
+            'Description'   => $UserObj->loc('Priority is'),
+            'TriggerTypes'  => [],
+            'ValueType'     => 'Integer'
+        },
+        {   'ConditionType' => 'PriorityUnder',
+            'Description'   => $UserObj->loc('Priority less than'),
+            'TriggerTypes'  => [],
+            'ValueType'     => 'Integer'
+        },
+        {   'ConditionType' => 'PriorityOver',
+            'Description'   => $UserObj->loc('Priority greater than'),
+            'TriggerTypes'  => [],
+            'ValueType'     => 'Integer'
+        },
+        {   'ConditionType' => 'CustomFieldIs',
+            'Name'          => $UserObj->loc('Custom field exactly matches'),
+            'TriggerTypes'  => [],
+            'ValueType'     => 'String'
+        },
+        {   'ConditionType' => 'CustomFieldContains',
+            'Name'          => $UserObj->loc('Custom field contains'),
+            'TriggerTypes'  => [],
+            'ValueType'     => 'String'
+        },
+        {   'ConditionType' => 'StatusIs',
+            'Name'          => $UserObj->loc('Status is'),
+            'TriggerTypes'  => [],
+            'ValueType'     => 'Status'
+        },
+        );
+
+    foreach (@ConditionProviders) {
+        push @ConditionTypes, $_->($UserObj);
+    }
+
+    return @ConditionTypes;
 }
 
 =head2 ActionTypes $UserObj
@@ -461,15 +606,204 @@ sub ConditionTypes {
 Return an array of all available action types, with the names localised for
 the given user.
 
-(TODO)
+Each array entry is a hash reference containing these keys:
+
+=over 18
+
+=item B<ActionType>
+
+The internal name for this action type; this should follow the naming
+convention for variables - start with a letter, no spaces, and so on - and
+it must be unique
+
+=item B<Name>
+
+Localised name, to be displayed to the operator
+
+=item B<ValueType>
+
+Which type of value the action expects as a parameter - one of I<None>,
+I<String>, I<Integer>, I<Email>, I<Group>, I<Queue>, I<Status>, or I<HTML>
+
+=item B<Function>
+
+If present, this is a code reference which will be called to perform this
+action; this code reference will be passed a hash of the parameters from
+inside an C<RT::FilterRule::Action> object, as it will be called from the
+B<Perform> method of C<RT::FilterRule::Action>
+
+=back
+
+If I<Function> is not present, the B<Perform> method of
+C<RT::FilterRule::Action> will attempt to call an C<RT::FilterRule::Action>
+method of the same name as I<ActionType> with C<_> prepended, returning a
+failed action (and logging an error) if such a method does not exist.
+
+Note that:
+
+=over
+
+=item *
+
+If I<ActionType> contains the string C<CustomField>, then a custom field
+must be selected by the person creating the action, separately to the value,
+and this will populate the C<RT::FilterRule::Action>'s I<CustomField>
+attribute;
+
+=item *
+
+If I<ActionType> contains the string C<NotifyEmail>, then an email address
+must be entered by the person creating the action, separately to the value,
+and this will populate the C<RT::FilterRule::Action>'s I<Notify> attribute;
+
+=item *
+
+If I<ActionType> contains the string C<NotifyGroup>, then an RT group must
+be selected by the person creating the action, separately to the value, and
+this will populate the C<RT::FilterRule::Action>'s I<Notify> attribute.
+
+=back
 
 =cut
 
 sub ActionTypes {
     my ( $Package, $UserObj ) = @_;
+    my @ActionTypes = ();
 
-    # TODO: writeme
-    return ();
+    push @ActionTypes,
+        (
+        {   'ActionType' => 'None',
+            'Name'       => $UserObj->loc('Take no action'),
+            'ValueType'  => 'None'
+        },
+        {   'ActionType' => 'SubjectPrefix',
+            'Name'       => $UserObj->loc('Add prefix to subject'),
+            'ValueType'  => 'String'
+        },
+        {   'ActionType' => 'SubjectSuffix',
+            'Name'       => $UserObj->loc('Add suffix to subject'),
+            'ValueType'  => 'String'
+        },
+        {   'ActionType' => 'SubjectRemoveMatch',
+            'Name'       => $UserObj->loc('Remove string from subject'),
+            'ValueType'  => 'String'
+        },
+        {   'ActionType' => 'SubjectSet',
+            'Name'       => $UserObj->loc('Replace subject'),
+            'ValueType'  => 'String'
+        },
+        {   'ActionType' => 'PrioritySet',
+            'Name'       => $UserObj->loc('Set priority'),
+            'ValueType'  => 'Integer'
+        },
+        {   'ActionType' => 'PriorityAdd',
+            'Name'       => $UserObj->loc('Add to priority'),
+            'ValueType'  => 'Integer'
+        },
+        {   'ActionType' => 'PrioritySubtract',
+            'Name'       => $UserObj->loc('Subtract from priority'),
+            'ValueType'  => 'Integer'
+        },
+        {   'ActionType' => 'StatusSet',
+            'Name'       => $UserObj->loc('Set status'),
+            'ValueType'  => 'Status'
+        },
+        {   'ActionType' => 'QueueSet',
+            'Name'       => $UserObj->loc('Move to queue'),
+            'ValueType'  => 'Queue'
+        },
+        {   'ActionType' => 'CustomFieldSet',
+            'Name'       => $UserObj->loc('Set custom field value'),
+            'ValueType'  => 'String'
+        },
+        {   'ActionType' => 'RequestorAdd',
+            'Name'       => $UserObj->loc('Add requestor'),
+            'ValueType'  => 'Email'
+        },
+        {   'ActionType' => 'RequestorRemove',
+            'Name'       => $UserObj->loc('Remove requestor'),
+            'ValueType'  => 'Email'
+        },
+        {   'ActionType' => 'CcAdd',
+            'Name'       => $UserObj->loc('Add CC'),
+            'ValueType'  => 'Email'
+        },
+        {   'ActionType' => 'CcAddGroup',
+            'Name'       => $UserObj->loc('Add group as a CC'),
+            'ValueType'  => 'Group'
+        },
+        {   'ActionType' => 'CcRemove',
+            'Name'       => $UserObj->loc('Remove CC'),
+            'ValueType'  => 'Email'
+        },
+        {   'ActionType' => 'AdminCcAdd',
+            'Name'       => $UserObj->loc('Add AdminCC'),
+            'ValueType'  => 'Email'
+        },
+        {   'ActionType' => 'AdminCcAddGroup',
+            'Name'       => $UserObj->loc('Add group as an AdminCC'),
+            'ValueType'  => 'Group'
+        },
+        {   'ActionType' => 'AdminCcRemove',
+            'Name'       => $UserObj->loc('Remove AdminCC'),
+            'ValueType'  => 'Email'
+        },
+        {   'ActionType' => 'Reply',
+            'Name'       => $UserObj->loc('Reply to ticket'),
+            'ValueType'  => 'HTML'
+        },
+        {   'ActionType' => 'NotifyEmail',
+            'Name' => $UserObj->loc('Send notification to an email address'),
+            'ValueType' => 'HTML'
+        },
+        {   'ActionType' => 'NotifyGroup',
+            'Name' => $UserObj->loc('Send notification to RT group members'),
+            'ValueType' => 'HTML'
+        },
+        );
+
+    foreach (@ActionProviders) {
+        push @ActionTypes, $_->($UserObj);
+    }
+
+    return @ActionTypes;
+}
+
+=head2 AddConditionProvider CODEREF
+
+Add a condition provider, which is a function accepting an
+C<RT::CurrentUser> object and returning an array of the same form as the
+B<ConditionTypes> method.
+
+The B<ConditionTypes> method will call the provided code reference and
+append its returned values to the array it returns.
+
+Other extensions can call this method to add their own filter condition
+types.
+
+=cut
+
+sub AddConditionProvider {
+    my ($Package, $CodeRef) = @_;
+    push @ConditionProviders, $CodeRef;
+}
+
+=head2 AddActionProvider CODEREF
+
+Add an action provider, which is a function accepting an
+C<RT::CurrentUser> object and returning an array of the same form as the
+B<ActionTypes> method.
+
+The B<ActionTypes> method will call the provided code reference and append
+its returned values to the array it returns.
+
+Other extensions can call this method to add their own filter action types.
+
+=cut
+
+sub AddActionProvider {
+    my ($Package, $CodeRef) = @_;
+    push @ActionProviders, $CodeRef;
 }
 
 {
@@ -2617,6 +2951,30 @@ B<Match> method.
         return 0;
     }
 
+=head2 TestSingleValue PARAMS, Check => VALUE
+
+Test the event described in the parameters against this condition, returning
+true if matched, false otherwise, where only the specific I<VALUE> is tested
+against the event's I<From>/I<To>/I<Ticket>.
+
+This is called internally by the B<Test> method for each of the value checks
+in the condition.
+
+(TODO)
+
+=cut
+
+    sub TestSingleValue {
+        my $self = shift;
+
+        # TODO: writeme
+        return 0;
+    }
+
+
+
+
+
 =head2 Properties
 
 Return the properties of this object as a hash reference, suitable for
@@ -2673,7 +3031,7 @@ other parameters are passed to B<Set> below.
             'ActionType'  => 'All',
             'CustomField' => 0,
             'Value'       => '',
-            'Destination' => '',
+            'Notify' => '',
             'Ticket'      => undef,
         };
 
