@@ -43,25 +43,25 @@ Known to work with RT 4.2.16, 4.4.4, and 5.0.1.
 
 May need root permissions.
 
-=item Set up the database
+=item B<Set up the database>
 
 After running C<make install> for the first time, you will need to create
 the database tables for this extension.  Use C<etc/schema-mysql.sql> for
 MySQL or MariaDB, or C<etc/schema-postgresql.sql> for PostgreSQL.
 
-=item Edit your F</opt/rt4/etc/RT_SiteConfig.pm>
+=item B<Edit your> F</opt/rt4/etc/RT_SiteConfig.pm>
 
 Add this line:
 
     Plugin('RT::Extension::FilterRules');
 
-=item Clear your mason cache
+=item B<Clear your Mason cache>
 
     rm -rf /opt/rt4/var/mason_data/obj
 
-=item Restart your web server
+=item B<Restart your web server>
 
-=item Add the processing scrip
+=item B<Add the processing scrip>
 
 Create a new global scrip under I<Admin> - I<Global> - I<Scrips>:
 
@@ -110,7 +110,7 @@ created and enabled.
 Note that the C<return 0> lines are only there to prevent errors if you
 later remove this extension without disabling the scrip.
 
-=item Set up some filter rule groups
+=item B<Set up some filter rule groups>
 
 Rule groups are set up by the RT administrator under I<Admin> - I<Filter
 rule groups>.
@@ -128,11 +128,11 @@ For the purposes of this tutorial, we assume that you have these queues:
 
 =over 16
 
-=item "General"
+=item B<"General">
 
 - for general queries;
 
-=item "Technical"
+=item B<"Technical">
 
 - for more technical matters to be escalated to.
 
@@ -142,15 +142,15 @@ We also assume that you have these user-defined groups set up:
 
 =over 30
 
-=item "Service desk"
+=item B<"Service desk">
 
 - containing all first-line analysts;
 
-=item "Service desk management"
+=item B<"Service desk management">
 
 - containing the leadership team for the service desk;
 
-=item "Third line"
+=item B<"Third line">
 
 - containing all technical teams.
 
@@ -425,37 +425,51 @@ sub ScripCommit {
         );
     }
 
-    # Perform the actions we have accumulated.
+    # Perform the non-notification actions we have accumulated.
     #
-    foreach (@$Actions) {
-        $Package->PerformAction(
-            'Action' => $_,
-            'Ticket' => $Action->TicketObj
-        );
+    foreach ( grep { not $_->IsNotification } @$Actions ) {
+        $_->Perform();
+    }
+
+    # Perform the notification actions we have accumulated.
+    #
+    foreach ( grep { $_->IsNotification } @$Actions ) {
+        $_->Perform();
     }
 
     return 1;
 }
 
-=head2 PerformAction Action => ACTION, Ticket => TICKET
+=head2 ConditionTypes $UserObj
 
-Perform the given action on the given ticket.
+Return an array of all available condition types, with the names localised
+for the given user.
 
 (TODO)
 
 =cut
 
-sub PerformAction {
-    my $Package = shift;
-    my %args    = (
-        'Action' => undef,
-        'Ticket' => 0,
-        @_
-    );
+sub ConditionTypes {
+    my ( $Package, $UserObj ) = @_;
 
     # TODO: writeme
+    return ();
+}
 
-    return ( 1, '' );
+=head2 ActionTypes $UserObj
+
+Return an array of all available action types, with the names localised for
+the given user.
+
+(TODO)
+
+=cut
+
+sub ActionTypes {
+    my ( $Package, $UserObj ) = @_;
+
+    # TODO: writeme
+    return ();
 }
 
 {
@@ -470,58 +484,58 @@ The attributes of this class are:
 
 =over 20
 
-=item id
+=item B<id>
 
 The numeric ID of this filter rule group
 
-=item SortOrder
+=item B<SortOrder>
 
 The order of processing - filter rule groups with a lower sort order are
 processed first
 
-=item Name
+=item B<Name>
 
 The displayed name of this filter rule group
 
-=item CanMatchQueues
+=item B<CanMatchQueues>
 
 The queues which rules in this rule group are allowed to use in their
 conditions, as a comma-separated list of queue IDs (also presented as an
 C<RT::Queues> object via B<CanMatchQueuesObj>)
 
-=item CanTransferQueues
+=item B<CanTransferQueues>
 
 The queues which rules in this rule group are allowed to use as transfer
 destinations in their actions, as a comma-separated list of queue IDs (also
 presented as an C<RT::Queues> object via B<CanTransferQueuesObj>)
 
-=item CanUseGroups
+=item B<CanUseGroups>
 
 The groups which rules in this rule group are allowed to use in match
 conditions and actions, as a comma-separated list of group IDs (also
 presented as an C<RT::Groups> object via B<CanUseGroupsObj>)
 
-=item Creator
+=item B<Creator>
 
 The numeric ID of the creator of this filter rule group (also presented as
 an C<RT::User> object via B<CreatorObj>)
 
-=item Created
+=item B<Created>
 
 The date and time this filter rule group was created (also presented as an
 C<RT::Date> object via B<CreatedObj>)
 
-=item LastUpdatedBy
+=item B<LastUpdatedBy>
 
 The numeric ID of the user who last updated the properties of this filter
 rule group (also presented as an C<RT::User> object via B<LastUpdatedByObj>)
 
-=item LastUpdated
+=item B<LastUpdated>
 
 The date and time this filter rule group's properties were last updated
 (also presented as an C<RT::Date> object via B<LastUpdatedObj>)
 
-=item Disabled
+=item B<Disabled>
 
 Whether this filter rule group is disabled; the filter rule group is active
 unless this property is true
@@ -542,21 +556,21 @@ users with the I<SuperUser> right.
 The following rights can be assigned to individual filter rule groups to
 delegate control of the filter rules within them:
 
-=over
+=over 18
 
-=item SeeFilterRule
+=item B<SeeFilterRule>
 
 View the filter rules in this filter rule group
 
-=item ModifyFilterRule
+=item B<ModifyFilterRule>
 
 Modify existing filter rules in this filter rule group
 
-=item CreateFilterRule
+=item B<CreateFilterRule>
 
 Create new filter rules in this filter rule group
 
-=item DeleteFilterRule
+=item B<DeleteFilterRule>
 
 Delete filter rules from this filter rule group
 
@@ -936,8 +950,9 @@ caller should process the event through the B<FilterRules> for this group.
 
 =head2 AddGroupCondition Name => NAME, ...
 
-Add a condition to this filter rule group; calls B<RT::FilterRule::Create>
-below, overriding the B<FilterRuleGroup> parameter, and returns its output.
+Add a condition to this filter rule group; calls the C<RT::FilterRule>
+B<Create> method, overriding the I<FilterRuleGroup> and I<IsGroupCondition>
+parameters, and returns its output.
 
 =cut
 
@@ -980,8 +995,9 @@ for this rule group.
 
 =head2 AddFilterRule Name => NAME, ...
 
-Add a filter rule to this filter rule group; calls B<RT::FilterRule::Create>
-below, overriding the B<FilterRuleGroup> parameter, and returns its output.
+Add a filter rule to this filter rule group; calls the C<RT::FilterRule>
+B<Create> method, overriding the I<FilterRuleGroup> and I<IsGroupCondition>
+parameters, and returns its output.
 
 =cut
 
@@ -1479,17 +1495,17 @@ The attributes of this class are:
 
 =over 20
 
-=item id
+=item B<id>
 
 The numeric ID of this filter rule
 
-=item FilterRuleGroup
+=item B<FilterRuleGroup>
 
 The numeric ID of the filter rule group to which this filter rule belongs
 (also presented as an C<RT::FilterRuleGroup> object via
 B<FilterRuleGroupObj>)
 
-=item IsGroupCondition
+=item B<IsGroupCondition>
 
 Whether this is a filter rule which describes conditions under which the
 filter rule group as a whole is applicable (true), or a filter rule for
@@ -1502,72 +1518,78 @@ This attribute is set automatically when a C<RT::FilterRule> object is
 created via the B<AddGroupCondition> and B<AddFilterRule> methods of
 C<RT::FilterRuleGroup>.
 
-=item SortOrder
+=item B<SortOrder>
 
 The order of processing - filter rules with a lower sort order are processed
 first
 
-=item Name
+=item B<Name>
 
 The displayed name of this filter rule
 
-=item TriggerType
+=item B<TriggerType>
 
 The type of action which triggers this filter rule - one of:
 
 =over 10
 
-=item Create
+=item I<Create>
 
 Consider this rule on ticket creation
 
-=item QueueMove
+=item I<QueueMove>
 
 Consider this rule when the ticket moves between queues
 
 =back
 
-=item StopIfMatched
+=item B<StopIfMatched>
 
 If this is true, then processing of the remaining rules in this filter rule
 group should be skipped if this rule matches
 
-=item Conflicts
+=item B<Conflicts>
 
-Conditions which, if met, mean this rule cannot match (TODO: define format)
+Conditions which, if met, mean this rule cannot match; this is presented as
+an array of C<RT::FilterRule::Condition> objects, and stored as
+a Base64-encoded string encoding an array ref containing hash refs.
 
-=item Requirements
+=item B<Requirements>
 
 Conditions which, if any are met, mean this rule matches, so long as none of
-the conflict conditions above have matched (TODO: define format)
+the conflict conditions above have matched; this is also presented as an
+array of C<RT::FilterRule::Condition> objects, and stored in the
+same way as above.
 
-=item Actions
+=item B<Actions>
 
-Actions to carry out on the ticket if the rule matches; this field is unused
-for filter rule group applicability rules (where B<IsGroupCondition> is 1)
-(TODO: define format)
+Actions to carry out on the ticket if the rule matches (this field is unused
+for filter rule group applicability rules, i.e.  where B<IsGroupCondition>
+is 1); it is presented as an array of C<RT::FilterRule::Action>
+objects, and stored as a Base64-encoded string encoding an array ref
+containing hash refs.
 
-=item Creator
+=item B<Creator>
 
 The numeric ID of the creator of this filter rule (also presented as an
 C<RT::User> object via B<CreatorObj>)
 
-=item Created
+=item B<Created>
 
 The date and time this filter rule was created (also presented as an
 C<RT::Date> object via B<CreatedObj>)
 
-=item LastUpdatedBy
+=item B<LastUpdatedBy>
 
 The numeric ID of the user who last updated the properties of this filter
 rule (also presented as an C<RT::User> object via B<LastUpdatedByObj>)
 
-=item LastUpdated
+=item B<LastUpdated>
 
 The date and time this filter rule's properties were last updated (also
 presented as an C<RT::Date> object via B<LastUpdatedObj>)
 
-=item Disabled
+=item B<Disabled>
 
 Whether this filter rule is disabled; the filter rule is active unless this
 property is true
@@ -1582,6 +1604,9 @@ property is true
     sub Table {'FilterRules'}
 
     use RT::Transactions;
+
+    use Storable;
+    use MIME::Base64;
 
 =head1 RT::FilterRule METHODS
 
@@ -1623,7 +1648,24 @@ which will be undefined if there was a problem.
             && UNIVERSAL::isa( $args{'FilterRuleGroup'},
                 'RT::FilterRuleGroup' ) );
 
-        # TODO: parse Conflicts, Requirements, Actions
+        foreach my $Attribute ( 'Conflicts', 'Requirements', 'Actions' ) {
+            my $Value = $args{$Attribute};
+            next if ( not ref $Value );
+            my @NewList = map { $_->Properties() } @$Value;
+            $Value = '';
+            eval {
+                $Value
+                    = MIME::Base64::encode_base64(
+                    Storable::nfreeze( \@NewList ) );
+            };
+            if ($@) {
+                RT->Logger->error(
+                    "RT::Extension::FilterRules - failed to serialise RT::FilterRule attribute $Attribute"
+                );
+            }
+            $self->{ '_' . $Attribute } = $args{$Attribute};
+            $args{$Attribute} = $Value;
+        }
 
         # Normalise IsGroupCondition to 1 or 0
         $args{'IsGroupCondition'} = $args{'IsGroupCondition'} ? 1 : 0;
@@ -1691,52 +1733,214 @@ rule group.
         return ( $self->{'_FilterRuleGroup_obj'} );
     }
 
-=head2 SetConflicts VALUE
+=head2 Conflicts
 
-Set the conditions which, if met, mean this rule cannot match (TODO: define format).
+Return an array of C<RT::FilterRule::Condition> objects describing the
+conditions which, if any are met, mean this rule cannot match.
 
-(TODO)
+=cut
+
+    sub Conflicts {
+        my ($self) = @_;
+        if ( not defined $self->{'_Conflicts'} ) {
+            my $CurrentValue = [];
+
+            # Thaw the encoded value
+            eval {
+                $CurrentValue
+                    = Storable::thaw(
+                    MIME::Base64::decode_base64( $self->_Value('Conflicts') )
+                    );
+            };
+            if ($@) {
+                RT->Logger->error(
+                    "RT::Extension::FilterRules - failed to deserialise RT::FilterRule attribute Conflicts"
+                );
+            }
+
+            # Convert the thawed data from hashrefs into objects
+            $self->{'_Conflicts'} = [];
+            foreach (@$CurrentValue) {
+                my $NewObject
+                    = RT::FilterRule::Condition->new( $self->CurrentUser,
+                    %$_ );
+                push @{ $self->{'_Conflicts'} }, $NewObject;
+            }
+        }
+        return @{ $self->{'_Conflicts'} };
+    }
+
+=head2 SetConflicts CONDITION, CONDITION, ...
+
+Set the conditions which, if any are met, mean this rule cannot match. 
+Expects an array of C<RT::FilterRule::Condition> objects.
 
 =cut
 
     sub SetConflicts {
-        my ( $self, $NewValue ) = @_;
+        my ( $self, @Conditions ) = @_;
 
-        # TODO: writeme
-        return ( 0, '' );
+        my @NewList = map { $_->Properties() } @Conditions;
+        my $NewValue = '';
+        eval {
+            $NewValue
+                = MIME::Base64::encode_base64(
+                Storable::nfreeze( \@NewList ) );
+        };
+
+        if ($@) {
+            RT->Logger->error(
+                "RT::Extension::FilterRules - failed to serialise RT::FilterRule attribute Conflicts"
+            );
+            return ( 0, $self->loc('Failed to serialise conflicts') );
+        }
+
+        $self->{'_Conflicts'} = [@Conditions];
+        return $self->_Set(
+            'Field' => 'Conflicts',
+            'Value' => $NewValue
+        );
     }
 
-=head2 SetRequirements
+=head2 Requirements
+
+Return an array of C<RT::FilterRule::Condition> objects describing the
+conditions which, if any are met, mean this rule matches, so long as none of
+the conflict conditions above have matched.
+
+=cut
+
+    sub Requirements {
+        my ($self) = @_;
+        if ( not defined $self->{'_Requirements'} ) {
+            my $CurrentValue = [];
+
+            # Thaw the encoded value
+            eval {
+                $CurrentValue = Storable::thaw(
+                    MIME::Base64::decode_base64(
+                        $self->_Value('Requirements')
+                    )
+                );
+            };
+            if ($@) {
+                RT->Logger->error(
+                    "RT::Extension::FilterRules - failed to deserialise RT::FilterRule attribute Requirements"
+                );
+            }
+
+            # Convert the thawed data from hashrefs into objects
+            $self->{'_Requirements'} = [];
+            foreach (@$CurrentValue) {
+                my $NewObject
+                    = RT::FilterRule::Condition->new( $self->CurrentUser,
+                    %$_ );
+                push @{ $self->{'_Requirements'} }, $NewObject;
+            }
+        }
+        return @{ $self->{'_Requirements'} };
+    }
+
+=head2 SetRequirements CONDITION, CONDITION, ...
 
 Set the conditions which, if any are met, mean this rule matches, so long as
-none of the conflict conditions above have matched (TODO: define format).
-
-(TODO)
+none of the conflict conditions above have matched.  Expects an array of
+C<RT::FilterRule::Condition> objects.
 
 =cut
 
     sub SetRequirements {
-        my ( $self, $NewValue ) = @_;
+        my ( $self, @Conditions ) = @_;
 
-        # TODO: writeme
-        return ( 0, '' );
+        my @NewList = map { $_->Properties() } @Conditions;
+        my $NewValue = '';
+        eval {
+            $NewValue
+                = MIME::Base64::encode_base64(
+                Storable::nfreeze( \@NewList ) );
+        };
+
+        if ($@) {
+            RT->Logger->error(
+                "RT::Extension::FilterRules - failed to serialise RT::FilterRule attribute Requirements"
+            );
+            return ( 0, $self->loc('Failed to serialise conflicts') );
+        }
+
+        $self->{'_Requirements'} = [@Conditions];
+        return $self->_Set(
+            'Field' => 'Requirements',
+            'Value' => $NewValue
+        );
     }
 
-=head2 SetActions
+=head2 Actions
+
+Return an array of C<RT::FilterRule::Action> objects describing the actions
+to carry out on the ticket if the rule matches.
+
+=cut
+
+    sub Actions {
+        my ($self) = @_;
+        if ( not defined $self->{'_Actions'} ) {
+            my $CurrentValue = [];
+
+            # Thaw the encoded value
+            eval {
+                $CurrentValue
+                    = Storable::thaw(
+                    MIME::Base64::decode_base64( $self->_Value('Actions') ) );
+            };
+            if ($@) {
+                RT->Logger->error(
+                    "RT::Extension::FilterRules - failed to deserialise RT::FilterRule attribute Actions"
+                );
+            }
+
+            # Convert the thawed data from hashrefs into objects
+            $self->{'_Actions'} = [];
+            foreach (@$CurrentValue) {
+                my $NewObject
+                    = RT::FilterRule::Action->new( $self->CurrentUser, %$_ );
+                push @{ $self->{'_Actions'} }, $NewObject;
+            }
+        }
+        return @{ $self->{'_Actions'} };
+    }
+
+=head2 SetActions ACTION, ACTION, ...
 
 Set the actions to carry out on the ticket if the rule matches; this field
 is unused for filter rule group applicability rules (where
-B<IsGroupCondition> is 1) (TODO: define format).
-
-(TODO)
+B<IsGroupCondition> is 1).  Expects an array of C<RT::FilterRule::Action>
+objects.
 
 =cut
 
     sub SetActions {
-        my ( $self, $NewValue ) = @_;
+        my ( $self, @Actions ) = @_;
 
-        # TODO: writeme
-        return ( 0, '' );
+        my @NewList = map { $_->Properties() } @Actions;
+        my $NewValue = '';
+        eval {
+            $NewValue
+                = MIME::Base64::encode_base64(
+                Storable::nfreeze( \@NewList ) );
+        };
+
+        if ($@) {
+            RT->Logger->error(
+                "RT::Extension::FilterRules - failed to serialise RT::FilterRule attribute Actions"
+            );
+            return ( 0, $self->loc('Failed to serialise conflicts') );
+        }
+
+        $self->{'_Actions'} = [@Actions];
+        return $self->_Set(
+            'Field' => 'Actions',
+            'Value' => $NewValue
+        );
     }
 
 =head2 Delete
@@ -1789,7 +1993,7 @@ this filter rule matched an event.
         return $Collection;
     }
 
-=head2 Match Matches => [], Actions => [], TriggerType => TYPE, From => FROM, To => TO
+=head2 Match Matches => [], Actions => [], TriggerType => TYPE, From => FROM, To => TO, IncludeAll => 0
 
 Return true if this filter rule matches the given event, false otherwise. 
 If returning true, details of this rule and the matching condition will be
@@ -1807,7 +2011,80 @@ queue to another, the I<From> parameter should be the ID of the queue the
 ticket was in before the move, and the I<To> parameter should be the ID of
 the queue the ticket moved into.
 
-(TODO)
+If I<IncludeAll> is true, then all conditions for this filter rule will be
+added to I<Matches> regardless of whether they matched; this can be used to
+present the operator with details of how an event would be processed.
+
+Each entry added to the I<Matches> array reference will be a hash reference
+with these keys:
+
+=over 12
+
+=item B<FilterRule>
+
+This C<RT::FilterRule> object
+
+=item B<Conditions>
+
+An array reference containing one entry for each condition checked from this
+filter rule's B<Requirements>, each of which is a hash reference containing
+the following keys:
+
+=over 11
+
+=item B<Condition>
+
+The C<RT::FilterRule::Condition> object describing this
+condition
+
+=item B<Matched>
+
+Whether this condition matched (this will always be true unless
+I<IncludeAll> is true, since the condition wouldn't be included otherwise
+because all B<Requirement> conditions must be met for a rule to match)
+
+=item B<Checks>
+
+An array reference containing one entry for each value checked in the
+condition (since conditions can have multiple OR values), stopping at the
+first match; each entry is a hash reference containing the following keys:
+
+=over 9
+
+=item B<Target>
+
+The target value that the event was checked against
+
+=item B<Matched>
+
+Whether the event's value matched the target value
+
+=back
+
+=back
+
+=item B<Matched>
+
+Whether the whole condition matched (this will always be true unless
+I<IncludeAll> was supplied, since the condition wouldn't be included
+otherwise)
+
+=back
+
+Each entry added to the I<Actions> array reference will be a hash reference
+with these keys:
+
+=over 11
+
+=item B<FilterRule>
+
+This C<RT::FilterRule> object
+
+=item B<Action>
+
+The C<RT::FilterRule::Action> object describing this action
+
+=back
 
 =cut
 
@@ -2206,6 +2483,313 @@ C<RT::FilterRule> class.
 
 {
 
+=head1 Internal package RT::FilterRule::Condition
+
+This package provides the C<RT::FilterRule::Condition> class,
+which describes a condition in a filter rule and provides methods to match
+an event on a ticket against that condition.
+
+Objects of this class are not stored directly in the database, but are
+encoded within attributes of C<RT::FilterRule> objects.
+
+=cut
+
+    package RT::FilterRule::Condition;
+
+    use base 'RT::Base';
+
+=head1 RT::FilterRule::Condition METHODS
+
+This class inherits from C<RT::Base>.
+
+=cut
+
+=head2 new $UserObj[, PARAMS...]
+
+Construct and return a new object, given an C<RT::CurrentUser> object.  Any
+other parameters are passed to B<Set> below.
+
+=cut
+
+    sub new {
+        my ( $proto, $UserObj, @args ) = @_;
+        my ( $class, $self );
+
+        $class = ref($proto) || $proto;
+
+        $self = {
+            'ConditionType' => 'All',
+            'CustomField'   => 0,
+            'Values'        => [],
+            'TriggerType'   => 'Unspecified',
+            'From'          => 0,
+            'To'            => 0,
+            'Ticket'        => undef,
+        };
+
+        bless( $self, $class );
+
+        $self->CurrentUser($UserObj);
+
+        $self->Set(@args);
+
+        return $self;
+    }
+
+=head2 Set Key => VALUE, ...
+
+Set parameters of this condition object.  The following parameters define
+the condition itself:
+
+=over 15
+
+=item B<ConditionType>
+
+The type of condition, such as I<InQueue>, I<FromQueue>, I<SubjectContains>,
+and so on - see the C<RT::Extension::FilterRules> method B<ConditionTypes>.
+
+=item B<CustomField>
+
+The custom field ID associated with this condition, if applicable
+
+=item B<Values>
+
+Array reference containing the list of values to match against, any one of
+which will mean the condition has matched
+
+=back
+
+The following parameters define the event being matched against:
+
+=over 
+
+=item B<TriggerType>
+
+The action which triggered this check, such as I<Create> or I<QueueMove>
+
+=item B<From>
+
+The value the ticket is changing from
+
+=item B<To>
+
+The value the ticket is changing to (the same as I<From> on ticket creation)
+
+=item B<Ticket>
+
+The ticket ID or C<RT::Ticket> object to match the condition against
+
+=back
+
+This method returns nothing.
+
+(TODO)
+
+=cut
+
+    sub Set {
+        my ( $self, %args ) = @_;
+
+        # TODO: writeme
+    }
+
+=head2 Test [PARAMS, Checks => ARRAYREF, IncludeAll => 1]
+
+Test the event described in the parameters against this condition, returning
+true if matched, false otherwise, and appending details of the checks
+performed to the I<Checks> array reference.
+
+If additional parameters are supplied, they are run through B<Set> above
+before the test is performed.
+
+The I<IncludeAll> parameter, and the contents of the I<Checks> array
+reference, are described in the documentation of the C<RT::FilterRule>
+B<Match> method.
+
+(TODO)
+
+=cut
+
+    sub Test {
+        my $self = shift;
+
+        # TODO: writeme
+        return 0;
+    }
+
+=head2 Properties
+
+Return the properties of this object as a hash reference, suitable for
+serialising and storing.
+
+=cut
+
+    sub Properties {
+        my $self = shift;
+        return {
+            'ConditionType' => $self->{'ConditionType'},
+            'CustomField'   => $self->{'CustomField'},
+            'Values'        => $self->{'Values'}
+        };
+    }
+}
+
+{
+
+=head1 Internal package RT::FilterRule::Action
+
+This package provides the C<RT::FilterRule::Action> class, which describes
+an action to perform on a ticket after matching a rule.
+
+Objects of this class are not stored directly in the database, but are
+encoded within attributes of C<RT::FilterRule> objects.
+
+=cut
+
+    package RT::FilterRule::Action;
+
+    use base 'RT::Base';
+
+=head1 RT::FilterRule::Action METHODS
+
+This class inherits from C<RT::Base>.
+
+=cut
+
+=head2 new $UserObj[, PARAMS...]
+
+Construct and return a new object, given an C<RT::CurrentUser> object.  Any
+other parameters are passed to B<Set> below.
+
+=cut
+
+    sub new {
+        my ( $proto, $UserObj, @args ) = @_;
+        my ( $class, $self );
+
+        $class = ref($proto) || $proto;
+
+        $self = {
+            'ActionType'  => 'All',
+            'CustomField' => 0,
+            'Value'       => '',
+            'Destination' => '',
+            'Ticket'      => undef,
+        };
+
+        bless( $self, $class );
+
+        $self->CurrentUser($UserObj);
+
+        $self->Set(@args);
+
+        return $self;
+    }
+
+=head2 Set Key => VALUE, ...
+
+Set parameters of this action object.  The following parameters define the
+action itself:
+
+=over 15
+
+=item B<ActionType>
+
+The type of action, such as I<SetSubject>, I<SetQueue>, and so on - see the
+C<RT::Extension::FilterRules> method B<ActionTypes>.
+
+=item B<CustomField>
+
+The custom field ID associated with this action, if applicable (such as
+which custom field to set the value of)
+
+=item B<Value>
+
+The value associated with this action, if applicable, such as the queue to
+move to, or the contents of an email to send
+
+=item B<Notify>
+
+The notification recipient associated with this action, if applicable, such
+as a group ID or email address to send a message to
+
+=back
+
+The following parameters define the ticket being acted upon:
+
+=over 
+
+=item B<Ticket>
+
+The ticket ID or C<RT::Ticket> object to match the condition against
+
+=back
+
+This method returns nothing.
+
+(TODO)
+
+=cut
+
+    sub Set {
+        my ( $self, %args ) = @_;
+
+        # TODO: writeme
+    }
+
+=head2 Perform
+
+Perform the action described by this object's parameters, returning
+( I<$ok>, I<$message> ).
+
+(TODO)
+
+=cut
+
+    sub Perform {
+        my $self = shift;
+
+        # TODO: writeme
+        return 0;
+    }
+
+=head2 IsNotification
+
+Return true if this action is of a type which sends a notification, false
+otherwise.  This is used when carrying out actions to ensure that all other
+ticket actions are performed first.
+
+(TODO)
+
+=cut
+
+    sub IsNotification {
+        my $self = shift;
+
+        # TODO: writeme
+        return 0;
+    }
+
+=head2 Properties
+
+Return the properties of this object as a hash reference, suitable for
+serialising and storing.
+
+=cut
+
+    sub Properties {
+        my $self = shift;
+        return {
+            'ActionType'  => $self->{'ActionType'},
+            'CustomField' => $self->{'CustomField'},
+            'Value'       => $self->{'Value'},
+            'Notify'      => $self->{'Notify'}
+        };
+    }
+}
+
+{
+
 =head1 Internal package RT::FilterRules
 
 This package provides the C<RT::FilterRules> class, which describes a
@@ -2239,21 +2823,21 @@ The attributes of this class are:
 
 =over 12
 
-=item id
+=item B<id>
 
 The numeric ID of this event
 
-=item FilterRule
+=item B<FilterRule>
 
 The numeric ID of the filter rule which matched (also presented as an
 C<RT::FilterRule> object via B<FilterRuleObj>)
 
-=item Ticket
+=item B<Ticket>
 
 The numeric ID of the ticket whose event matched this rule (also presented
 as an C<RT::Ticket> object via B<TicketObj>)
 
-=item Created
+=item B<Created>
 
 The date and time this event occurred (also presented as an C<RT::Date>
 object via B<CreatedObj>)
