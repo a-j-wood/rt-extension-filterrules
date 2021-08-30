@@ -4,19 +4,252 @@ Allow a filter rule to be edited.
   FilterRuleGroup - RT::FilterRuleGroup object containing the rules
   FilterRule - RT::FilterRule object for this rule, undef if creating new
   Edit - which type of rule to edit - "GroupConditions" or "FilterRules"
-  Page - URL of page this element is on, to post the form to
+  PageLink - URL of page this element is on, to post the form to
+  Create - if true, show the form to create a new rule
+  SetEnabled - if true, the "Enabled" checkbox is on the page
 
-TODO: writeme
+Assumes that $PageLink needs to be passed an "id" parameter of
+$FilterRuleGroup->id and a "Rule" parameter of the filter rule ID, to view
+or edit a filter rule.
 </%doc>
 \
 <%ARGS>
 $FilterRuleGroup => undef
-$FilterRule => undef
-$Edit => 'GroupConditions'
-$Page => undef
+$FilterRule      => undef
+$Edit            => 'GroupConditions'
+$PageLink        => undef
+$Create          => undef
+$SetEnabled      => undef
 </%ARGS>
 \
 <%INIT>
+return if ( not $FilterRuleGroup );
+
+my $CanSee    = $FilterRuleGroup->CurrentUserHasRight('SeeFilterRule');
+my $CanModify = $FilterRuleGroup->CurrentUserHasRight('ModifyFilterRule');
+my $CanCreate = $FilterRuleGroup->CurrentUserHasRight('CreateFilterRule');
+my $CanDelete = $FilterRuleGroup->CurrentUserHasRight('DeleteFilterRule');
+
+$CanSee = $CanModify = $CanCreate = $CanDelete = 1
+    if ( $session{'CurrentUser'}
+    ->HasRight( Right => 'SuperUser', Object => RT->System ) );
+
+my $EnabledChecked = 'checked="checked"';
+
+if ( ( not $Create ) && $FilterRule && $FilterRule->id ) {
+    $EnabledChecked = '' if ( $FilterRule->Disabled );
+} elsif ( $SetEnabled && ( not $ARGS{'Enabled'} ) ) {
+    $EnabledChecked = '';
+}
 </%INIT>
 
-TODO
+<p>
+<form action="<%$PageLink%>" method="post">
+<input type="hidden" name="id" value="<%$FilterRuleGroup->id%>" />
+<p>
+<input type="submit" value="&larr; <&|/l&>Back</&>" />
+</p>
+</form>
+
+% return
+%     if ( ( not defined $FilterRule )
+%     && ( not $Create ) );
+
+<form action="<%$PageLink%>" method="post">
+<input type="hidden" name="id" value="<%$FilterRuleGroup->id%>" />
+<input type="hidden" name="Rule" value="<% $Create ? 'new' : $FilterRule->id%>" />
+<input type="hidden" name="ModifyRule" value="1" />
+<table>
+<tr>\
+<td style="text-align:right;"><&|/l&>Name</&>:</td>\
+<td><input name="Name" value="<% $Create ? '' : $FilterRule->Name || $ARGS{'Name'} %>" /></td>\
+</tr>
+<tr>\
+<td style="text-align:right;"><input type="checkbox" class="checkbox" id="Enabled" name="Enabled" value="1" <%$EnabledChecked|n%> /></td>\
+<td><label for="Enabled"><&|/l&>Enabled (Unchecking this box disables this filter rule)</&></label><br />\
+<input type="hidden" class="hidden" name="SetEnabled" value="1" />\
+</td>\
+</tr>
+<tr>\
+<td style="text-align:right;"><&|/l&>Trigger type</&>:</td>\
+% my $TriggerTypeValue = $Create ? '' : $FilterRule->TriggerType || $ARGS{'TriggerType'};
+<td><select id="TriggerType" name="TriggerType">\
+<option value="Create"<% $TriggerTypeValue eq 'Create'?' selected':'' %>><&|/l&>On ticket creation</&></option>\
+<option value="QueueMove"<% $TriggerTypeValue eq 'QueueMove'?' selected':'' %>><&|/l&>When a ticket moves between queues</&></option>\
+</select></td>\
+</tr>
+
+%# TODO: other settings
+
+</table>
+% if ( $Create ) {
+<& /Elements/Submit, Label => loc('Create') &>
+% } else {
+<& /Elements/Submit, Label => loc('Save Changes') &>
+% }
+</form>
+
+<p>
+TODO: option to delete
+</p>
+
+% if ($FilterRule && $FilterRule->id) {
+<& /Elements/ShowHistory,
+    Object => $FilterRule,
+    ShowDisplayModes => 0,
+    DisplayPath => 'History.html',
+&>
+% }
+
+<%method Post>
+<%doc>
+Handle form submission to the rule editor, by creating, modifying, or
+deleting a rule as appropriate.
+</%doc>
+\
+<%ARGS>
+$ARGSRef         => {}
+$FilterRuleGroup => undef
+$Edit            => 'GroupConditions'
+$Results         => []
+</%ARGS>
+\
+<%INIT>
+return if ( not $FilterRuleGroup );
+return if ( $ARGSRef->{'Create'} );
+return if ( $ARGSRef->{'ModifyRule'} && ( not $ARGSRef->{'Rule'} ) );
+
+my $CanSee    = $FilterRuleGroup->CurrentUserHasRight('SeeFilterRule');
+my $CanModify = $FilterRuleGroup->CurrentUserHasRight('ModifyFilterRule');
+my $CanCreate = $FilterRuleGroup->CurrentUserHasRight('CreateFilterRule');
+my $CanDelete = $FilterRuleGroup->CurrentUserHasRight('DeleteFilterRule');
+
+$CanSee = $CanModify = $CanCreate = $CanDelete = 1
+    if ( $session{'CurrentUser'}
+    ->HasRight( Right => 'SuperUser', Object => RT->System ) );
+
+# Load the filter rule we're going to need, if modifying / moving
+#
+my $FilterRule = undef;
+my $LoadRule   = undef;
+if ( $ARGSRef->{'ModifyRule'} && ( $ARGSRef->{'Rule'} ne 'new' ) ) {
+    $LoadRule = $ARGSRef->{'Rule'};
+} elsif ( $ARGSRef->{'MoveUp'} ) {
+    $LoadRule = $ARGSRef->{'MoveUp'};
+} elsif ( $ARGSRef->{'MoveDown'} ) {
+    $LoadRule = $ARGSRef->{'MoveDown'};
+}
+if ($LoadRule) {
+    $FilterRule = RT::FilterRule->new( $session{'CurrentUser'} );
+    if ( not $FilterRule->Load($LoadRule) ) {
+        push @$Results, loc( 'Failed to load filter rule [_1]', $LoadRule );
+        return;
+    }
+    if ( $FilterRule->FilterRuleGroupObj->id != $FilterRuleGroup->id ) {
+        push @$Results,
+            loc( 'Filter rule [_1] is not part of filter rule group [_2]',
+            $LoadRule, $FilterRuleGroup->id );
+        return;
+    }
+
+    if ( $Edit eq 'GroupConditions' ) {
+        if ( not $FilterRule->IsGroupCondition ) {
+            push @$Results,
+                loc(
+                'Filter rule [_1] is not a condition rule of filter rule group [_2]',
+                $LoadRule, $FilterRuleGroup->id
+                );
+            return;
+        }
+    } else {
+        if ( $FilterRule->IsGroupCondition ) {
+            push @$Results,
+                loc(
+                'Filter rule [_1] is not a filter rule of filter rule group [_2]',
+                $LoadRule, $FilterRuleGroup->id
+                );
+            return;
+        }
+    }
+}
+
+if ( $ARGSRef->{'ModifyRule'} && ( $ARGSRef->{'Rule'} eq 'new' ) ) {
+
+    # Create a new filter rule.
+    #
+    if ( not $CanCreate ) {
+        push @$Results, loc('Permission denied');
+        $ARGSRef->{'Create'} = 1;
+        return;
+    }
+
+    my %CreateArgs = (
+        'Name'          => $ARGSRef->{'Name'},
+        'TriggerType'   => $ARGSRef->{'TriggerType'},
+        'StopIfMatched' => $ARGSRef->{'StopIfMatched'} ? 1 : 0,
+        'Conflicts'     => [],
+        'Requirements'  => [],
+        'Actions'       => [],
+        'Disabled'      => $ARGSRef->{'Enabled'} ? 0 : 1,
+    );
+
+    # TODO: parse conflicts, requirements, and actions
+
+    my ( $ok, $msg );
+
+    if ( $Edit eq 'GroupConditions' ) {
+        ( $ok, $msg ) = $FilterRuleGroup->AddGroupCondition(%CreateArgs);
+    } else {
+        ( $ok, $msg ) = $FilterRuleGroup->AddFilterRule(%CreateArgs);
+    }
+    if ($ok) {
+        $ARGSRef->{'Rule'} = $ok;
+    } else {
+        $ARGSRef->{'Create'} = 1;
+    }
+    push @$Results, $msg;
+
+} elsif ( $ARGSRef->{'ModifyRule'} && not $CanModify ) {
+    push @$Results, loc('Permission denied');
+    return;
+} elsif ( $ARGSRef->{'MoveUp'} && not $CanModify ) {
+    push @$Results, loc('Permission denied');
+    return;
+} elsif ( $ARGSRef->{'MoveDown'} && not $CanModify ) {
+    push @$Results, loc('Permission denied');
+    return;
+} elsif ( $ARGSRef->{'ModifyRule'} ) {
+
+    # Modify an existing filter rule.
+    #
+    my @Attributes = qw(Name TriggerType StopIfMatched Disabled);
+
+    $ARGSRef->{'Disabled'} = $ARGSRef->{'Enabled'} ? 0 : 1;
+
+    push @$Results,
+        UpdateRecordObject(
+        AttributesRef => \@Attributes,
+        Object        => $FilterRule,
+        ARGSRef       => $ARGSRef
+        );
+
+    # TODO: modify rule conflicts, requirements, actions
+
+} elsif ( $ARGSRef->{'MoveUp'} ) {
+
+    # Move an existing filter rule up.
+    #
+    my ( $ok, $msg ) = $FilterRule->MoveUp;
+    push @$Results, $msg;
+
+} elsif ( $ARGSRef->{'MoveDown'} ) {
+
+    # Move an existing filter rule down.
+    #
+    my ( $ok, $msg ) = $FilterRule->MoveDown;
+    push @$Results, $msg;
+}
+
+return;
+</%INIT>
+</%method>

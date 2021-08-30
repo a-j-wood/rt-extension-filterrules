@@ -4,18 +4,68 @@ and moved.
 
   FilterRuleGroup - RT::FilterRuleGroup object containing the rules
   Edit - which type of rules to list - "GroupConditions" or "FilterRules"
-  Page - URL of page this element is on, to post the form to
+  PageLink - URL of page this element is on, for links
 
-TODO: writeme
+Assumes that $PageLink needs to be passed an "id" parameter of
+$FilterRuleGroup->id and a "Rule" parameter of the filter rule ID, to view
+or edit a filter rule.
 </%doc>
 \
 <%ARGS>
 $FilterRuleGroup => undef
-$Edit => 'GroupConditions'
-$Page => undef
+$Edit            => 'GroupConditions'
+$PageLink        => undef
 </%ARGS>
 \
 <%INIT>
-</%INIT>
+return if ( not $FilterRuleGroup );
 
-TODO
+my $CanSee    = $FilterRuleGroup->CurrentUserHasRight('SeeFilterRule');
+my $CanModify = $FilterRuleGroup->CurrentUserHasRight('ModifyFilterRule');
+
+$CanSee = $CanModify = 1
+    if ( $session{'CurrentUser'}
+    ->HasRight( Right => 'SuperUser', Object => RT->System ) );
+
+my $Collection
+    = $Edit eq 'GroupConditions'
+    ? $FilterRuleGroup->GroupConditions
+    : $FilterRuleGroup->FilterRules;
+
+my $Format
+    = "'<a href=\"$PageLink?id="
+    . $FilterRuleGroup->id
+    . "&amp;Rule=__id__\">__id__</a>/TITLE:#',"
+    . "'<a href=\"$PageLink?id="
+    . $FilterRuleGroup->id
+    . "&amp;Rule=__id__\">__Name__</a>',"
+    . "'__TriggerType__',"
+    . "'__StopIfMatched__',"
+    . "'__Conflicts__',"
+    . "'__Requirements__'";
+$Format .= ",'__Actions__'," . "'__MatchCounts__'"
+    if ( $Edit eq 'FilterRules' );
+$Format .= ",'__Disabled__'";
+$Format .= ",'__MoveFilterRule__'" if ($CanModify);
+</%INIT>
+\
+% if (not ($CanSee || $CanModify)) {
+<& /Elements/ListActions, actions => [ loc('Permission denied') ] &>
+% } elsif (not $Collection->CountAll) {
+%     if ($Edit eq 'GroupConditions') {
+<p><em><&|/l&>No condition rules found.</&></em></p>
+%     } else {
+<p><em><&|/l&>No filter rules found.</&></em></p>
+%     }
+% } else {
+<& /Elements/CollectionList,
+    %ARGS,
+    OrderBy => 'SortOrder',
+    Order => 'ASC',
+    Rows  => undef,
+    Format => $Format,
+    Collection => $Collection,
+    AllowSorting => 0,
+    PassArguments => ['id'],
+&>
+% }

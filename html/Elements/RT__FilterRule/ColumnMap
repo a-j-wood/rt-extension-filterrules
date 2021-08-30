@@ -1,0 +1,93 @@
+<%doc>
+Define the /Elements/CollectionList column mappings for the
+RT::FilterRule class.
+</%doc>
+\
+<%ARGS>
+$Name => undef
+$Attr => undef
+$GenericMap => {}
+</%ARGS>
+\
+<%ONCE>
+my $COLUMN_MAP = {
+    'Disabled' => {
+        'title'     => 'Status',     # loc
+        'attribute' => 'Disabled',
+        'value'     => sub {
+            return $_[0]->Disabled
+                ? $_[0]->loc('Disabled')
+                : $_[0]->loc('Enabled');
+        },
+    },
+    'Name' => {
+        'title'     => 'Name',                       # loc
+        'attribute' => 'Name',
+        'value'     => sub { return $_[0]->Name },
+    },
+    'TriggerType' => {
+        'title'     => 'Trigger type',               # loc
+        'attribute' => 'TriggerType',
+        'value'     => sub {
+            my $Value = $_[0]->TriggerType || '-';
+            return $_[0]->loc('On ticket creation') if ( $Value eq 'Create' );
+            return $_[0]->loc('When a ticket moves between queues')
+                if ( $Value eq 'QueueMove' );
+            return $Value;
+        },
+    },
+    'StopIfMatched' => {
+        'title'     => 'Stop if matched',            # loc
+        'attribute' => 'StopIfMatched',
+        'value'     => sub {
+            return $_[0]->StopIfMatched
+                ? $_[0]->loc('Stop')
+                : $_[0]->loc('Continue');
+        },
+    },
+    'MoveFilterRule' => {
+        title => 'Move',                             # loc
+        value => sub {
+            my $id = $_[0]->id;
+
+            my $args = $m->caller_args(1);
+            my @pass
+                = ref $args->{'PassArguments'}
+                ? @{ $args->{'PassArguments'} }
+                : ( $args->{'PassArguments'} );
+            my %pass = map { $_ => $args->{$_} } grep exists $args->{$_},
+                @pass;
+
+            my $uri = RT->Config->Get('WebPath') . $m->request_path;
+
+            my @res = (
+                \'<a href="',
+                $uri . '?'
+                    . $m->comp(
+                    "/Elements/QueryString", %pass, 'MoveUp' => $id
+                    ),
+                \'">',
+                loc('~[Up~]'),
+                \'</a>',
+                \' <a href="',
+                $uri . '?'
+                    . $m->comp(
+                    "/Elements/QueryString", %pass, 'MoveDown' => $id
+                    ),
+                \'">',
+                loc('~[Down~]'),
+                \'</a>'
+            );
+
+            return @res;
+        },
+    },
+};
+</%ONCE>
+<%INIT>
+return GetColumnMapEntry(
+    Map       => $COLUMN_MAP,
+    Name      => $Name,
+    Attribute => $Attr
+);
+</%INIT>

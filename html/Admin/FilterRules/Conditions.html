@@ -4,7 +4,6 @@ Allow the conditions of a filter rule group to be modified.
 \
 <%ARGS>
 $id => undef
-$Rule => undef
 </%ARGS>
 \
 <%INIT>
@@ -16,30 +15,71 @@ unless ( $session{'CurrentUser'}
 
 my $FilterRuleGroup = RT::FilterRuleGroup->new( $session{'CurrentUser'} );
 $FilterRuleGroup->Load($id) || Abort("Couldn't load filter rule group '$id'");
-my $Title = loc( 'Conditions of the filter rule group [_1]',
-    $FilterRuleGroup->Name );
 
-my $FilterRule = undef;
-if ($Rule) {
-    $FilterRule = RT::FilterRule->new( $session{'CurrentUser'} );
-    $FilterRule->Load($Rule) || Abort("Couldn't load filter rule '$Rule'");
-    if ( $FilterRule->FilterRuleObj->id != $id ) {
-        Abort("Filter rule '$Rule' is not part of filter rule group '$id'");
-    }
-}
+my $Title = loc( 'Filter rule group #[_1]: [_2]: Condition rules',
+    $FilterRuleGroup->id, $FilterRuleGroup->Name );
 
 my @Results = ();
 
-# TODO: writeme
+if (   $ARGS{'Rule'}
+    || $ARGS{'Create'}
+    || $ARGS{'MoveUp'}
+    || $ARGS{'MoveDown'} )
+{
+    $m->comp(
+        '/Elements/FilterRules/EditRule:Post',
+        'ARGSRef'         => \%ARGS,
+        'FilterRuleGroup' => $FilterRuleGroup,
+        'Edit'            => 'GroupConditions',
+        'Results'         => \@Results
+    );
+}
 
+my $FilterRule = undef;
+if ( $ARGS{'Rule'} && not $ARGS{'Create'} ) {
+    $FilterRule = RT::FilterRule->new( $session{'CurrentUser'} );
+    $FilterRule->Load( $ARGS{'Rule'} )
+        || Abort("Couldn't load filter rule '$ARGS{'Rule'}'");
+    if ( $FilterRule->FilterRuleGroupObj->id != $id ) {
+        Abort(
+            "Filter rule '$ARGS{'Rule'}' is not part of filter rule group '$id'"
+        );
+    }
+    $Title = loc(
+        'Filter rule group #[_1]: [_2]: Condition rule #[_3]: [_4]',
+        $FilterRuleGroup->id, $FilterRuleGroup->Name,
+        $FilterRule->id,      $FilterRule->Name
+    );
+} elsif ( $ARGS{'Create'} ) {
+    $Title = loc( 'Filter rule group #[_1]: [_2]: Add new condition rule',
+        $FilterRuleGroup->id, $FilterRuleGroup->Name );
+}
 </%INIT>
 \
 <& /Admin/Elements/Header, Title => $Title  &>
 <& /Elements/Tabs &>
 <& /Elements/ListActions, actions => \@Results &>
 
-% if ($Rule) {
-<& /Elements/FilterRules/EditRule, FilterRuleGroup => $FilterRuleGroup, FilterRule => $FilterRule, Edit => 'GroupConditions', Page => 'Conditions.html' &>
+% if ($ARGS{'Rule'} || $ARGS{'Create'}) {
+<& /Elements/FilterRules/EditRule,
+    %ARGS,
+    FilterRuleGroup => $FilterRuleGroup,
+    FilterRule => $FilterRule,
+    Edit => 'GroupConditions',
+    PageLink => RT->Config->Get('WebPath') . '/Admin/FilterRules/Conditions.html',
+&>
 % } else {
-<& /Elements/FilterRules/ShowRules, FilterRuleGroup => $FilterRuleGroup, Edit => 'GroupConditions', Page => 'Conditions.html' &>
+<form action="Conditions.html" method="post">
+<input type="hidden" name="id" value="<%$id%>" />
+<input type="hidden" name="Create" value="1" />
+<p>
+<input type="submit" value="<&|/l&>Create new condition rule</&>" />
+</p>
+</form>
+<& /Elements/FilterRules/ShowRules,
+    %ARGS,
+    FilterRuleGroup => $FilterRuleGroup,
+    Edit => 'GroupConditions',
+    PageLink => RT->Config->Get('WebPath') . '/Admin/FilterRules/Conditions.html',
+&>
 % }

@@ -83,7 +83,6 @@ my $COLUMN_MAP = {
         value => sub {
             my $id = $_[0]->id;
 
-            my $name = 'MoveCustomField';
             my $args = $m->caller_args(1);
             my @pass
                 = ref $args->{'PassArguments'}

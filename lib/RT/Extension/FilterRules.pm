@@ -6,8 +6,7 @@ package RT::Extension::FilterRules;
 our $VERSION = '0.01';
 
 our @ConditionProviders = ();
-our @ActionProviders = ();
-
+our @ActionProviders    = ();
 
 =head1 NAME
 
@@ -784,7 +783,7 @@ types.
 =cut
 
 sub AddConditionProvider {
-    my ($Package, $CodeRef) = @_;
+    my ( $Package, $CodeRef ) = @_;
     push @ConditionProviders, $CodeRef;
 }
 
@@ -802,7 +801,7 @@ Other extensions can call this method to add their own filter action types.
 =cut
 
 sub AddActionProvider {
-    my ($Package, $CodeRef) = @_;
+    my ( $Package, $CodeRef ) = @_;
     push @ActionProviders, $CodeRef;
 }
 
@@ -1293,9 +1292,12 @@ parameters, and returns its output.
     sub AddGroupCondition {
         my $self = shift;
         my %args = (@_);
+        my $Object;
 
-        return RT::FilterRule->new(
-            $self->CurrentUser, %args,
+        $Object = RT::FilterRule->new( $self->CurrentUser );
+
+        return $Object->Create(
+            %args,
             'FilterRuleGroup'  => $self->id,
             'IsGroupCondition' => 1
         );
@@ -1338,9 +1340,12 @@ parameters, and returns its output.
     sub AddFilterRule {
         my $self = shift;
         my %args = (@_);
+        my $Object;
 
-        return RT::FilterRule->new(
-            $self->CurrentUser, %args,
+        $Object = RT::FilterRule->new( $self->CurrentUser );
+
+        return $Object->Create(
+            %args,
             'FilterRuleGroup'  => $self->id,
             'IsGroupCondition' => 0
         );
@@ -2971,10 +2976,6 @@ in the condition.
         return 0;
     }
 
-
-
-
-
 =head2 Properties
 
 Return the properties of this object as a hash reference, suitable for
@@ -3031,7 +3032,7 @@ other parameters are passed to B<Set> below.
             'ActionType'  => 'All',
             'CustomField' => 0,
             'Value'       => '',
-            'Notify' => '',
+            'Notify'      => '',
             'Ticket'      => undef,
         };
 
