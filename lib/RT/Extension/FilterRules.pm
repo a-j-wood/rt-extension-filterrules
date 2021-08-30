@@ -124,9 +124,161 @@ actually do anything.
 
 =head1 TUTORIAL
 
-=head2 Setting up filter rule groups
+For the purposes of this tutorial, we assume that you have these queues:
+
+=over 16
+
+=item "General"
+
+- for general queries;
+
+=item "Technical"
+
+- for more technical matters to be escalated to.
+
+=back
+
+We also assume that you have these user-defined groups set up:
+
+=over 30
+
+=item "Service desk"
+
+- containing all first-line analysts;
+
+=item "Service desk management"
+
+- containing the leadership team for the service desk;
+
+=item "Third line"
+
+- containing all technical teams.
+
+=back
+
+These are only examples for illustration, there is no need for your system
+to be set up this way to use it with this extension.
+
+=head2 Create a new filter rule group
+
+=over
+
+=item 1.
+
+As a superuser, go to I<Admin> - I<Filter rule groups> - I<Create>.
+
+=item 2.
+
+Provide a name for the new filter rule group, such as
+I<"General inbound message filtering">, and click on the B<Create> button.
+
+=item 3.
+
+Now that the filter rule group has been created, you can define the queues
+and groups it can use.
+
+Next to I<Queues to allow in match rules>, select your I<General> queue and
+click on the B<Add queue> button.
+
+=item 4.
+
+You will see the I<General> queue is now listed next to I<Queues to allow in
+match rules>.  If you select it and click on the B<Save Changes> button, the
+queue will be removed from the list.
+
+If you tried that, add it back again before the next step.
+
+=item 5.
+
+Rules in this filter rule group need to be able to transfer tickets into the
+I<Technical> queue, so next to I<Queues to allow as transfer destinations>,
+select your I<Technical> queue and click on the B<Add queue> button.
+
+=item 6.
+
+Add the I<Service desk> and I<Third line> groups to
+I<Groups to allow in rule actions> to be able to use them in filter rules,
+such as sending notifications to members of those groups.
+
+=back
+
+After saving your changes, go back to I<Admin> - I<Filter rule groups>, and
+you will see your new filter rule group and its settings.
+
+Once you have more than one, you can move them up and down in the list to
+control the order in which they are processed, using the I<Up> and I<Down>
+links at the right.
+
+=head2 Set the conditions for the filter rule group
+
+A filter rule group will not process any messages unless its conditions are
+met.  Each one starts off with no conditions, so will remain inactive until
+you define some.
+
+From I<Admin> - I<Filter rule groups>, click on your new filter rule group,
+and then choose I<Conditions> from the page menu at the top.
 
 (TODO)
+
+=head2 Delegate control of the filter rule group
+
+In this example, the new filter rule group you created above, called
+I<General inbound message filtering>, is going to be managed by the
+service desk management team.  This means that you want them to be able to
+create, update, and delete filter rules within that group with no
+assistance.
+
+We will also allow the service desk team to view the filter rules, so that
+they have visibility of what automated processing is being applied to
+tickets they are receiving.
+
+=over
+
+=item 1.
+
+From I<Admin> - I<Filter rule groups>, click on your new filter rule group,
+and then choose I<Group Rights> from the page menu at the top.
+
+=item 2.
+
+In the text box under I<ADD GROUP> at the bottom left, type
+I<"Service desk management"> but do not hit Enter.
+
+=item 3.
+
+On the right side of the screen, under I<Rights for Staff>, select all of
+the rights so that the management team can fully control the filter rules in
+this filter rule group.
+
+=item 4.
+
+Click on the B<Save Changes> button at the bottom right to grant these
+rights.
+
+=item 5.
+
+In the text box under I<ADD GROUP> at the bottom left, type
+I<"Service desk"> but do not hit Enter.
+
+=item 6.
+
+On the right side of the screen, under I<Rights for Staff>, select only the
+I<View filter rules> right, so that the service desk analysts can only view
+these filter rules, not edit them.
+
+=item 7.
+
+Click on the B<Save Changes> button at the bottom right to grant these
+rights.
+
+=back
+
+Members of the I<Service desk management> group will now be able to manage
+the filter rules of the I<General inbound message filtering> filter rule
+group, under the I<Tools> - I<Filter rules> menu.
+
+Members of the I<Service desk> group will be able to see those rules there
+too, but will not be able to modify them.
 
 =head2 Creating filter rules
 
@@ -377,11 +529,11 @@ unless this property is true
 =back
 
 The basic conditions of the filter rule group are defined by its
-B<GroupConditions> object, which is a collection of C<RT::FilterRule>
-objects whose B<IsGroupCondition> attribute is true.  If any of these rules
-match, the ticket is eligible to be passed through the rules for this group.
+B<GroupConditions>, which is a collection of C<RT::FilterRule> objects whose
+B<IsGroupCondition> attribute is true.  If I<any> of these rules match, the
+ticket is eligible to be passed through the rules for this group.
 
-The filter rules for this group presented via B<FilterRules>, which is a
+The filter rules for this group are presented via B<FilterRules>, which is a
 collection of C<RT::FilterRule> objects.
 
 Filter rule groups themselves can only be created, modified, and deleted by
