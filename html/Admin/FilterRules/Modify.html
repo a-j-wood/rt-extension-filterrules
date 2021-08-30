@@ -1,0 +1,94 @@
+<%doc>
+Modify the settings of a filter rule group, or create a new one.
+</%doc>
+\
+<%ARGS>
+$id => undef
+$Create => undef
+$Name => undef
+$SetEnabled => undef
+$Enabled => undef
+</%ARGS>
+\
+<%INIT>
+my ( $Title, @Results, $Disabled, $EnabledChecked );
+my $Object = RT::FilterRuleGroup->new( $session{'CurrentUser'} );
+$Object->Load($id) if !$id || $id eq 'new';
+
+@Results = ();
+
+if ($SetEnabled) {
+    $Disabled = $ARGS{'Disabled'} = $Enabled ? 0 : 1;
+}
+$EnabledChecked = 'checked="checked"';
+
+if ( not $Create ) {
+    if ( defined $id && $id eq 'new' ) {
+        my ( $ok, $msg )
+            = $Object->Create( Name => $Name, Disabled => $Disabled );
+        if ( not $ok ) {
+            $Create = 1;    # Create failed, so bring us back to step 1
+        }
+        push @Results, $msg;
+    } else {
+        $Object->Load($id)
+            || $Object->Load($Name)
+            || Abort(
+            loc( "Couldn't load filter rule group '[_1]'", $Name ) );
+    }
+}
+
+if ( $Object->Id ) {
+    $Title = loc( 'Configuration for filter rule group [_1]', $Object->Name );
+    my @Attributes
+        = qw(Name CanMatchQueues CanTransferQueues CanUseGroups Disabled);
+
+    push @Results,
+        UpdateRecordObject(
+        AttributesRef => \@Attributes,
+        Object        => $Object,
+        ARGSRef       => \%ARGS
+        );
+
+    $Disabled = $ARGS{'Disabled'} = $Enabled ? 0 : 1;
+
+    $EnabledChecked = "" if $Object->Disabled;
+
+} else {
+    $Title = loc('Create a filter rule group');
+}
+
+# This code does automatic redirection if any updates happen.
+MaybeRedirectForResults(
+    Actions   => \@Results,
+    Arguments => { id => $Object->id },
+) if $Object->id;
+</%INIT>
+\
+<& /Admin/Elements/Header, Title => $Title &>
+<& /Elements/Tabs &>
+<& /Elements/ListActions, actions => \@Results &>
+
+<form action="<%RT->Config->Get('WebPath')%>/Admin/FilterRules/Modify.html" method="post">
+<input type="hidden" class="hidden" name="id" value="<% $Create ? 'new': $Object->Id %>" />
+<table>
+<tr>\
+<td style="text-align:right;"><&|/l&>Name</&>:</td>\
+<td><input name="Name" value="<% $Create ? '' : $Object->Name || $Name %>" /></td>\
+</tr>
+%# TODO: CanMatchQueues
+%# TODO: CanTransferQueues
+%# TODO: CanUseGroups
+<tr>\
+<td style="text-align:right;"><input type="checkbox" class="checkbox" id="Enabled" name="Enabled" value="1" <%$EnabledChecked|n%> /></td>\
+<td><label for="Enabled"><&|/l&>Enabled (Unchecking this box disables this filter rule group)</&></label><br />\
+<input type="hidden" class="hidden" name="SetEnabled" value="1" />\
+</td>\
+</tr>
+</table>
+% if ( $Create ) {
+<& /Elements/Submit, Label => loc('Create') &>
+% } else {
+<& /Elements/Submit, Label => loc('Save Changes') &>
+% }
+</form>

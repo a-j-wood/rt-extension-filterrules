@@ -1,0 +1,80 @@
+<%doc>
+Define the /Elements/CollectionList column mappings for the
+RT::FilterRuleGroup class.
+</%doc>
+\
+<%ARGS>
+$Name => undef
+$Attr => undef
+$GenericMap => {}
+</%ARGS>
+\
+<%ONCE>
+my $COLUMN_MAP = {
+    'Disabled' => {
+        'title'     => 'Status',     # loc
+        'attribute' => 'Disabled',
+        'value'     => sub {
+            return $_[0]->Disabled
+                ? $_[0]->loc('Disabled')
+                : $_[0]->loc('Enabled');
+        },
+    },
+    'Name' => {
+        'title'     => 'Name',                       # loc
+        'attribute' => 'Name',
+        'value'     => sub { return $_[0]->Name },
+    },
+    'MoveFilterRuleGroup' => {
+        title => 'Move',                             # loc
+        value => sub {
+            my $id = $_[0]->id;
+
+            my $name = 'MoveCustomField';
+            my $args = $m->caller_args(1);
+            my @pass
+                = ref $args->{'PassArguments'}
+                ? @{ $args->{'PassArguments'} }
+                : ( $args->{'PassArguments'} );
+            my %pass = map { $_ => $args->{$_} } grep exists $args->{$_},
+                @pass;
+
+            my $uri = RT->Config->Get('WebPath') . $m->request_path;
+
+            my @res = (
+                \'<a href="',
+                $uri . '?'
+                    . $m->comp(
+                    "/Elements/QueryString", %pass, 'MoveUp' => $id
+                    ),
+                \'">',
+                loc('~[Up~]'),
+                \'</a>',
+                \' <a href="',
+                $uri . '?'
+                    . $m->comp(
+                    "/Elements/QueryString", %pass, 'MoveDown' => $id
+                    ),
+                \'">',
+                loc('~[Down~]'),
+                \'</a>'
+            );
+
+            return @res;
+        },
+    },
+};
+</%ONCE>
+<%INIT>
+#$m->callback(
+#    GenericMap   => $GenericMap,
+#    COLUMN_MAP   => $COLUMN_MAP,
+#    CallbackName => 'ColumnMap',
+#    CallbackOnce => 1
+#);
+return GetColumnMapEntry(
+    Map       => $COLUMN_MAP,
+    Name      => $Name,
+    Attribute => $Attr
+);
+</%INIT>

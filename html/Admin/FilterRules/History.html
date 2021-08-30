@@ -1,0 +1,22 @@
+<%doc>
+Display the history of a filter rule group.
+</%doc>
+\
+<%ARGS>
+$id => undef
+</%ARGS>
+\
+<%INIT>
+my $Object = RT::FilterRuleGroup->new( $session{'CurrentUser'} );
+$Object->Load($id) || Abort("Couldn't load filter rule group '$id'");
+my $Title = loc( 'History of the filter rule group [_1]', $Object->Name );
+</%INIT>
+\
+<& /Admin/Elements/Header, Title => $Title  &>
+<& /Elements/Tabs &>
+
+<& /Elements/ShowHistory,
+    Object => $Object,
+    ShowDisplayModes => 0,
+    DisplayPath => 'History.html',
+&>
