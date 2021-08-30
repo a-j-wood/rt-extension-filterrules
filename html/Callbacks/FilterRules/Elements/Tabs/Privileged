@@ -87,6 +87,11 @@ if ( $session{'CurrentUser'}
                     'path' => '/Admin/FilterRules/Modify.html?id=' . $id
                 );
                 $Menu->child(
+                    'conditions',
+                    title  => loc('Conditions'),
+                    'path' => '/Admin/FilterRules/Conditions.html?id=' . $id
+                );
+                $Menu->child(
                     'group-rights',
                     title  => loc('Group Rights'),
                     'path' => '/Admin/FilterRules/GroupRights.html?id=' . $id

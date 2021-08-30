@@ -25,8 +25,61 @@ my $COLUMN_MAP = {
         'attribute' => 'Name',
         'value'     => sub { return $_[0]->Name },
     },
+    'CanMatchQueues' => {
+        'title'     => 'Queues to allow in match rules',    # loc
+        'attribute' => 'CanMatchQueues',
+        'value'     => sub {
+            my $Collection = $_[0]->CanMatchQueuesObj;
+            return '-' if ( $Collection->CountAll() == 0 );
+            my $Output = '';
+            while ( my $Item = $Collection->Next ) {
+                $Output .= '<br />' if ( $Output ne '' );
+                $Output .= $m->interp->apply_escapes(
+                    '#' . $Item->id . ': ' . $Item->Name, 'h' );
+            }
+            return \$Output;
+            }
+    },
+    'CanTransferQueues' => {
+        'title'     => 'Queues to allow as transfer destinations',    # loc
+        'attribute' => 'CanTransferQueues',
+        'value'     => sub {
+            my $Collection = $_[0]->CanTransferQueuesObj;
+            return '-' if ( $Collection->CountAll() == 0 );
+            my $Output = '';
+            while ( my $Item = $Collection->Next ) {
+                $Output .= '<br />' if ( $Output ne '' );
+                $Output .= $m->interp->apply_escapes(
+                    '#' . $Item->id . ': ' . $Item->Name, 'h' );
+            }
+            return \$Output;
+            }
+    },
+    'CanUseGroups' => {
+        'title'     => 'Groups to allow in rule actions',    # loc
+        'attribute' => 'CanUseGroups',
+        'value'     => sub {
+            my $Collection = $_[0]->CanUseGroupsObj;
+            return '-' if ( $Collection->CountAll() == 0 );
+            my $Output = '';
+            while ( my $Item = $Collection->Next ) {
+                $Output .= '<br />' if ( $Output ne '' );
+                $Output .= $m->interp->apply_escapes(
+                    '#' . $Item->id . ': ' . $Item->Name, 'h' );
+            }
+            return \$Output;
+            }
+    },
+    'ConditionsCount' => {
+        'title' => 'Conditions',                                        # loc
+        'value' => sub { return $_[0]->GroupConditions->CountAll; }
+    },
+    'FilterRulesCount' => {
+        'title' => 'Filter rules',                                      # loc
+        'value' => sub { return $_[0]->FilterRules->CountAll; }
+    },
     'MoveFilterRuleGroup' => {
-        title => 'Move',                             # loc
+        title => 'Move',                                                # loc
         value => sub {
             my $id = $_[0]->id;
 
@@ -66,12 +119,6 @@ my $COLUMN_MAP = {
 };
 </%ONCE>
 <%INIT>
-#$m->callback(
-#    GenericMap   => $GenericMap,
-#    COLUMN_MAP   => $COLUMN_MAP,
-#    CallbackName => 'ColumnMap',
-#    CallbackOnce => 1
-#);
 return GetColumnMapEntry(
     Map       => $COLUMN_MAP,
     Name      => $Name,

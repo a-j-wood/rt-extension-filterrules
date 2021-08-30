@@ -1,5 +1,5 @@
 <%doc>
-Display the history of a filter rule group.
+Allow the conditions of a filter rule group to be modified.
 </%doc>
 \
 <%ARGS>
@@ -12,17 +12,16 @@ unless ( $session{'CurrentUser'}
 {
     Abort( loc('This feature is only available to system administrators.') );
 }
-
 my $Object = RT::FilterRuleGroup->new( $session{'CurrentUser'} );
 $Object->Load($id) || Abort("Couldn't load filter rule group '$id'");
-my $Title = loc( 'History of the filter rule group [_1]', $Object->Name );
+my $Title = loc( 'Conditions of the filter rule group [_1]', $Object->Name );
+my @Results = ();
 </%INIT>
 \
 <& /Admin/Elements/Header, Title => $Title  &>
 <& /Elements/Tabs &>
+<& /Elements/ListActions, actions => \@Results &>
 
-<& /Elements/ShowHistory,
-    Object => $Object,
-    ShowDisplayModes => 0,
-    DisplayPath => 'History.html',
-&>
+<p>
+TODO: writeme
+</p>
