@@ -1,7 +1,5 @@
 <%doc>
 Page to manage the filter rules that the current user has access to.
-
-TODO: writeme
 </%doc>
 \
 <%ARGS>
@@ -81,6 +79,7 @@ my $Format
 <em><&|/l&>You do not have access to any filter rule groups.</&></em>
 </p>
 % } else {
+<p>TODO: Filter testing form - select ticket, trigger type, from/to queues, show matches</p>
 <& /Elements/CollectionList,
     OrderBy => 'SortOrder',
     Order => 'ASC',
@@ -176,6 +175,7 @@ if ( $ARGS{'Rule'} && not $ARGS{'Create'} ) {
 </p>
 </form>
 %     }
+<p>TODO: Filter testing form - select ticket, trigger type, from/to queues, show matches</p>
 <& /Elements/FilterRules/ShowRules,
     %ARGS,
     FilterRuleGroup => $FilterRuleGroup,
