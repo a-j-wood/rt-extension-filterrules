@@ -374,7 +374,7 @@ Returns true on success.
 sub ScripCommit {
     my ( $Package, $Action ) = @_;
     my ( $TriggerType, $QueueFrom, $QueueTo ) = ( undef, undef, undef );
-    my ( $FilterRuleGroups, $FilterRuleGroup, $Matches, $Actions );
+    my ( $FilterRuleGroups, $FilterRuleGroup, $RuleChecks, $Actions );
 
     #
     # Determine the type of trigger to look for, and the queue(s) involved.
@@ -395,8 +395,8 @@ sub ScripCommit {
     #
     return 0 if ( not defined $TriggerType );
 
-    $Matches = [];
-    $Actions = [];
+    $RuleChecks = [];
+    $Actions    = [];
 
     # Load all filter rule groups.
     #
@@ -414,7 +414,7 @@ sub ScripCommit {
         next
             if (
             not $FilterRuleGroup->CheckGroupRequirements(
-                'Matches'         => [],
+                'RuleChecks'      => [],
                 'TriggerType'     => $TriggerType,
                 'From'            => $QueueFrom,
                 'To'              => $QueueTo,
@@ -423,7 +423,7 @@ sub ScripCommit {
             )
             );
         $FilterRuleGroup->CheckFilterRules(
-            'Matches'         => $Matches,
+            'RuleChecks'      => $RuleChecks,
             'Actions'         => $Actions,
             'From'            => $QueueFrom,
             'To'              => $QueueTo,
@@ -483,7 +483,7 @@ I<None>, I<String>, I<Integer>, I<Email>, I<Queue>, or I<Status>
 If present, this is a code reference which will be called to check this
 condition; this code reference will be passed an C<RT::CurrentUser> object
 and a hash of the parameters from inside an C<RT::FilterRule::Condition>
-object (including I<CheckValue>), as it will be called from the
+object (including I<TargetValue>), as it will be called from the
 B<TestSingleValue> method of C<RT::FilterRule::Condition> - like
 B<TestSingleValue>, it should return ( I<$matched>, I<$message>,
 I<$eventvalue> ).
@@ -1398,34 +1398,49 @@ Delete this filter rule group, and all of its filter rules.  Returns
         return $self->SUPER::Delete();
     }
 
-=head2 CheckGroupRequirements Matches => [], TriggerType => ...,
+=head2 CheckGroupRequirements RuleChecks => [], TriggerType => ...,
 
-For the given event, append details of matching group requirements to the
-I<Matches> array reference.
+For the given event, append details of checked group requirements to the
+I<RuleChecks> array reference.
 
 A I<Ticket> should be supplied, either as an ID or as an C<RT::Ticket> object.
 
-Returns true if there were any requirement rule matches (meaning that the
-caller should pass the event through this filter rule group's
-B<FilterRules>), false if there were no matches.
+Returns ( I<$Matched>, I<$Message>, I<$EventValue>, I<$TargetValue> ), where
+I<$Matched> will be true if there were any requirement rule matches (meaning
+that the caller should pass the event through this filter rule group's
+B<FilterRules>), false if there were no matches.  The other returned values
+will relate to the last requirements rule matched.
 
 If I<IncludeDisabled> is true, then even rules marked as disabled will be
 checked.  The default is false.
 
-See B<RT::FilterRule::Match> for the structure of the I<Matches> array
-entries, and the event structure.
+If I<DescribeAll> is true, then all conditions for all requirement rules
+will be added to I<RuleChecks> regardless of whether they influenced the
+outcome; this can be used to present the operator with details of how an
+event would be processed.
+
+A I<Cache> should be provided, pointing to a hash reference to store
+information in while processing this event, which the caller should share
+with the B<CheckFilterRules> method and other instances of this class, for
+the same event.
+
+See the C<RT::FilterRule> B<TestRule> method for more details of these
+return values, for the structure of the I<RuleChecks> and I<Actions> array
+entries, and for the event structure.
 
 =cut
 
     sub CheckGroupRequirements {
         my $self = shift;
         my %args = (
-            'Matches'         => [],
+            'RuleChecks'      => [],
             'TriggerType'     => '',
             'From'            => 0,
             'To'              => 0,
             'Ticket'          => 0,
             'IncludeDisabled' => 0,
+            'DescribeAll'     => 0,
+            'Cache'           => {},
             @_
         );
         my ( $Collection, $Item );
@@ -1438,27 +1453,41 @@ entries, and the event structure.
             'OPERATOR' => '='
         ) if ( not $args{'IncludeDisabled'} );
         $Collection->GotoFirstItem();
+
+        my ( $Matched, $Message, $FinalEventValue, $FinalTargetValue )
+            = ( 0, '', '', '' );
+
         while ( $Item = $Collection->Next ) {
-            return 1
-                if (
-                $Item->Match(
-                    'Matches'     => $args{'Matches'},
-                    'Actions'     => [],
-                    'TriggerType' => $args{'TriggerType'},
-                    'From'        => $args{'From'},
-                    'To'          => $args{'To'},
-                    'Ticket'      => $args{'Ticket'}
-                )
+            my ($ItemMatch,      $ItemMessage,
+                $ItemEventValue, $ItemTargetValue
+               )
+                = $Item->TestRule(
+                'RuleChecks'  => $args{'RuleChecks'},
+                'Actions'     => [],
+                'TriggerType' => $args{'TriggerType'},
+                'From'        => $args{'From'},
+                'To'          => $args{'To'},
+                'Ticket'      => $args{'Ticket'},
+                'DescribeAll' => $args{'DescribeAll'},
+                'Cache'       => $args{'Cache'}
                 );
+            if ($ItemMatch) {
+                ( $Matched, $Message, $FinalEventValue, $FinalTargetValue )
+                    = (
+                    $ItemMatch,      $ItemMessage,
+                    $ItemEventValue, $ItemTargetValue
+                    );
+                last;
+            }
         }
 
-        return 0;
+        return ( $Matched, $Message, $FinalEventValue, $FinalTargetValue );
     }
 
-=head2 CheckFilterRules Matches => [], Actions => [], TriggerType => ...,
+=head2 CheckFilterRules RuleChecks => [], Actions => [], TriggerType => ...,
 
 For the given event, append details of matching filter rules to the
-I<Matches> array reference, and append details of the actions which should
+I<RuleChecks> array reference, and append details of the actions which should
 be performed due to those matches to the I<Actions> array reference.
 
 A I<Ticket> should be supplied, either as an ID or as an C<RT::Ticket> object.
@@ -1466,33 +1495,47 @@ A I<Ticket> should be supplied, either as an ID or as an C<RT::Ticket> object.
 If I<IncludeDisabled> is true, then even rules marked as disabled will be
 checked.  The default is false.
 
+If I<DescribeAll> is true, then all conditions for all filter rules will be
+added to I<RuleChecks> regardless of whether they influenced the outcome;
+this can be used to present the operator with details of how an event would
+be processed.
+
 If I<RecordMatch> is true, then the fact that a rule is matched will be
 recorded in the database (see C<RT::FilterRuleMatch>).  The default is not
 to record the match.
 
-Returns true if there were any filter rule matches, false otherwise.
+A I<Cache> should be provided, pointing to a hash reference to store
+information in while processing this event, which the caller should share
+with the B<CheckGroupRequirements> method and other instances of this class,
+for the same event.
 
-See B<RT::FilterRule::Match> for the structure of the I<Matches> and
-I<Actions> array entries, and the event structure.
+Returns ( I<$Matched>, I<$Message>, I<$EventValue>, I<$TargetValue> ), where
+I<$Matched> will be true if there were any filter rule matches, false
+otherwise, and the other parameters will be related to the last rule
+matched.
+
+See the C<RT::FilterRule> B<TestRule> method for more details of these
+return values, for the structure of the I<RuleChecks> and I<Actions> array
+entries, and for the event structure.
 
 =cut
 
     sub CheckFilterRules {
         my $self = shift;
         my %args = (
-            'Matches'         => [],
+            'RuleChecks'      => [],
             'Actions'         => [],
             'TriggerType'     => '',
             'From'            => 0,
             'To'              => 0,
             'Ticket'          => 0,
             'IncludeDisabled' => 0,
+            'DescribeAll'     => 0,
             'RecordMatch'     => 0,
+            'Cache'           => {},
             @_
         );
         my ( $Collection, $Item, $MatchesFound );
-
-        $MatchesFound = 0;
 
         $Collection = $self->FilterRules();
         $Collection->FindAllRows();
@@ -1503,25 +1546,36 @@ I<Actions> array entries, and the event structure.
         ) if ( not $args{'IncludeDisabled'} );
         $Collection->GotoFirstItem();
 
+        my ( $Matched, $Message, $FinalEventValue, $FinalTargetValue )
+            = ( 0, '', '', '' );
+
         while ( $Item = $Collection->Next ) {
-            if ($Item->Match(
-                    'Matches'     => $args{'Matches'},
-                    'Actions'     => $args{'Actions'},
-                    'TriggerType' => $args{'TriggerType'},
-                    'From'        => $args{'From'},
-                    'To'          => $args{'To'},
-                    'Ticket'      => $args{'Ticket'}
-                )
+            my ($ItemMatch,      $ItemMessage,
+                $ItemEventValue, $ItemTargetValue
                )
-            {
-                $MatchesFound = 1;
+                = $Item->TestRule(
+                'RuleChecks'  => $args{'RuleChecks'},
+                'Actions'     => $args{'Actions'},
+                'TriggerType' => $args{'TriggerType'},
+                'From'        => $args{'From'},
+                'To'          => $args{'To'},
+                'Ticket'      => $args{'Ticket'},
+                'DescribeAll' => $args{'DescribeAll'},
+                'Cache'       => $args{'Cache'}
+                );
+            if ($ItemMatch) {
+                ( $Matched, $Message, $FinalEventValue, $FinalTargetValue )
+                    = (
+                    $ItemMatch,      $ItemMessage,
+                    $ItemEventValue, $ItemTargetValue
+                    );
                 $Item->RecordMatch( 'Ticket' => $args{'Ticket'} )
                     if ( $args{'RecordMatch'} );
-                return 1 if ( $Item->StopIfMatched );
+                last if ( $Item->StopIfMatched );
             }
         }
 
-        return $MatchesFound;
+        return ( $Matched, $Message, $FinalEventValue, $FinalTargetValue );
     }
 
 =head2 MoveUp
@@ -2612,12 +2666,18 @@ this filter rule matched an event.
         return $Collection;
     }
 
-=head2 Match Matches => [], Actions => [], TriggerType => TYPE, From => FROM, To => TO, IncludeAll => 0
+=head2 TestRule RuleChecks => [], Actions => [], TriggerType => TYPE, From => FROM, To => TO, DescribeAll => 0
 
-Return true if this filter rule matches the given event, false otherwise. 
-If returning true, details of this rule and the matching condition will be
-appended to the I<Matches> array reference, and the actions this rule
-contains will be appended to the I<Actions> array reference.
+Test the event described in the parameters against the conditions in this
+filter rule, returning ( I<$Matched>, I<$Message>, I<$EventValue>,
+I<$TargetValue> ), where I<$Matched> is true if the rule matched,
+I<$Message> describes the match, I<$EventValue> is the value from the event
+that led to the result, and I<$TargetValue> is the value the event was
+checked against which let to the result.
+
+Details of this rule and the checked conditions will be appended to the
+I<RuleChecks> array reference, and the actions this rule contains will be
+appended to the I<Actions> array reference.
 
 The I<TriggerType> should be one of the valid I<TriggerType> attribute
 values listed above in the C<RT::FilterRule> class attributes documentation.
@@ -2630,24 +2690,67 @@ queue to another, the I<From> parameter should be the ID of the queue the
 ticket was in before the move, and the I<To> parameter should be the ID of
 the queue the ticket moved into.
 
-If I<IncludeAll> is true, then all conditions for this filter rule will be
-added to I<Matches> regardless of whether they matched; this can be used to
-present the operator with details of how an event would be processed.
+If I<DescribeAll> is true, then all conditions for this filter rule will be
+added to I<RuleChecks> regardless of whether they influenced the outcome;
+this can be used to present the operator with details of how an event would
+be processed.
 
-Each entry added to the I<Matches> array reference will be a hash reference
-with these keys:
+For instance, when I<DescribeAll> is false, if the rule did not match
+because of a conflict condition, then only the conflict conditions up to and
+including the first match will be included.
+
+A I<Cache> should be provided, pointing to a hash reference shared with
+other calls to this method for the same event.
+
+One entry will be added to the I<RuleChecks> array reference, consisting of
+a hash reference with these keys:
 
 =over 12
+
+=item B<Matched>
+
+Whether the whole rule matched
+
+=item B<Message>
+
+Description associated with the whole rule match status
+
+=item B<EventValue>
+
+The value from the event which led to the whole rule match status
+
+=item B<TargetValue>
+
+The value, in the final condition which led to the whole rule match status,
+which was tested against the I<EventValue>
 
 =item B<FilterRule>
 
 This C<RT::FilterRule> object
 
-=item B<Conditions>
+=item B<MatchType>
+
+The type of condition which caused this rule to match - blank if the rule
+did not match, or either C<Conflict> or C<Requirement> (see the
+I<Conditions> B<MatchType> description beolow)
+
+=item B<Conflicts>
 
 An array reference containing one entry for each condition checked from this
-filter rule's B<Requirements>, each of which is a hash reference containing
-the following keys:
+filter rule's B<Conflicts>, each of which is a hash reference of condition
+checks as described below.
+
+=item B<Requirements>
+
+An array reference containing one entry for each condition checked from this
+filter rule's B<Requirements>, each of which is a hash reference of
+condition checks as described below.
+
+=back
+
+The conditions check hash reference provided in each entry of the
+I<Conflicts> and I<Requirements> array references contain the following
+keys:
 
 =over 11
 
@@ -2657,35 +2760,34 @@ The C<RT::FilterRule::Condition> object describing this condition
 
 =item B<Matched>
 
-Whether this condition matched (this will always be true unless
-I<IncludeAll> is true, since the condition wouldn't be included otherwise
-because I<all> B<Requirements> conditions must be met for a rule to match)
+Whether this condition matched (see the note about I<DescribeAll> above)
 
 =item B<Checks>
 
 An array reference containing one entry for each value checked in the
 condition (since conditions can have multiple OR values), stopping at the
-first match; each entry is a hash reference containing the following keys:
+first match unless I<DescribeAll> is true; each entry is a hash reference
+containing the following keys:
 
-=over 9
+=over 13
 
-=item B<Target>
+=item B<Matched>
+
+Whether this check succeeded
+
+=item B<Message>
+
+Description associated with this check's match status
+
+=item B<EventValue>
+
+The value from the event which led to this check's match status
+
+=item B<TargetValue>
 
 The target value that the event was checked against
 
-=item B<Matched>
-
-Whether the event's value matched the target value
-
 =back
-
-=back
-
-=item B<Matched>
-
-Whether the whole condition matched (this will always be true unless
-I<IncludeAll> was supplied, since the condition wouldn't be included
-otherwise)
 
 =back
 
@@ -2704,24 +2806,123 @@ The C<RT::FilterRule::Action> object describing this action
 
 =back
 
-(TODO)
-
 =cut
 
-    sub Match {
+    sub TestRule {
         my $self = shift;
         my %args = (
-            'Matches'     => [],
+            'RuleChecks'  => [],
             'Actions'     => [],
             'TriggerType' => '',
             'From'        => 0,
             'To'          => 0,
+            'Ticket'      => undef,
+            'DescribeAll' => 0,
+            'Cache'       => {},
             @_
         );
 
-        # TODO: writeme
+        my %TestConditionParameters = (
+            map { $_, $args{$_} } (
+                'TriggerType', 'From', 'To', 'Ticket',
+                'Cache',       'DescribeAll'
+            )
+        );
 
-        return 0;
+        my $RuleCheck = {
+            'Matched'      => 0,
+            'Message'      => '',
+            'EventValue'   => '',
+            'TargetValue'  => '',
+            'FilterRule'   => $self,
+            'MatchType'    => '',
+            'Conflicts'    => [],
+            'Requirements' => []
+        };
+
+        # Check whether any conflict conditions are met, in which case this
+        # rule will not match.
+        #
+        my $ConflictFound = 0;
+        foreach my $Condition ( $self->Conflicts ) {
+            my $ConditionCheck = {
+                'Condition' => $Condition,
+                'Matched'   => 0,
+                'Checks'    => []
+            };
+
+            my ( $Matched, $Message, $EventValue, $TargetValue )
+                = $Condition->TestCondition( %TestConditionParameters,
+                'Checks' => $ConditionCheck->{'Checks'} );
+            $ConditionCheck->{'Matched'} = $Matched;
+            push @{ $RuleCheck->{'Conflicts'} }, $ConditionCheck;
+
+            if ($Matched) {
+                $ConflictFound              = 1;
+                $RuleCheck->{'Message'}     = $Message;
+                $RuleCheck->{'EventValue'}  = $EventValue;
+                $RuleCheck->{'TargetValue'} = $TargetValue;
+                $RuleCheck->{'MatchType'}   = 'Conflict';
+                last;
+            }
+        }
+
+        # If no conflicts were found, check that all requirement conditions
+        # are met, in which case the rule matches.
+        #
+        if ( not $ConflictFound ) {
+            my $MatchFound  = 0;
+            my $MatchFailed = 0;
+
+            foreach my $Condition ( $self->Requirements ) {
+                my $ConditionCheck = {
+                    'Condition' => $Condition,
+                    'Matched'   => 0,
+                    'Checks'    => []
+                };
+
+                my ( $Matched, $Message, $EventValue, $TargetValue )
+                    = $Condition->TestCondition( %TestConditionParameters,
+                    'Checks' => $ConditionCheck->{'Checks'} );
+                $ConditionCheck->{'Matched'} = $Matched;
+                push @{ $RuleCheck->{'Requirements'} }, $ConditionCheck;
+
+                if ($Matched) {
+                    $MatchFound = 1;
+                } else {
+                    $MatchFailed                = 1;
+                    $RuleCheck->{'Message'}     = $Message;
+                    $RuleCheck->{'EventValue'}  = $EventValue;
+                    $RuleCheck->{'TargetValue'} = $TargetValue;
+                    $RuleCheck->{'MatchType'}   = 'Requirement';
+                    last;
+                }
+            }
+
+            if ( $MatchFailed == 0 && $MatchFound ) {
+                $RuleCheck->{'Matched'} = 1;
+                $RuleCheck->{'Message'} = $self->loc('All requirements met');
+                $RuleCheck->{'MatchType'} = 'Requirement';
+            } elsif ( $MatchFailed == 0 && $MatchFound == 0 ) {
+                $RuleCheck->{'Message'}
+                    = $self->loc('No requirements defined');
+                $RuleCheck->{'MatchType'} = 'Requirement';
+            }
+        }
+
+        push @{ $args{'RuleChecks'} }, $RuleCheck;
+
+        if ( $RuleCheck->{'Matched'} ) {
+            foreach my $Action ( $self->Actions ) {
+                push @{ $args{'Actions'} },
+                    { 'FilterRule' => $self, 'Action' => $Action };
+            }
+        }
+
+        return (
+            $RuleCheck->{'Matched'},    $RuleCheck->{'Message'},
+            $RuleCheck->{'EventValue'}, $RuleCheck->{'TargetValue'}
+        );
     }
 
 =head2 RecordMatch Ticket => ID
@@ -3206,7 +3407,7 @@ The C<RT::Ticket> object to match the condition against
 =back
 
 Finally, B<Cache> should be set to a hash reference, which should be
-shared across all B<Test> or T<TestSingleValue> calls for this event;
+shared across all B<Test> or B<TestSingleValue> calls for this event;
 lookups such as ticket subject, custom field ID to name mappings, and so on,
 will be cached here so that they don't have to be done multiple times.
 
@@ -3228,57 +3429,67 @@ This method returns nothing.
         return 1;
     }
 
-=head2 Test [PARAMS, Checks => ARRAYREF, IncludeAll => 1]
+=head2 TestCondition [PARAMS, Checks => ARRAYREF, DescribeAll => 1]
 
 Test the event described in the parameters against this condition, returning
-( I<$matched>, I<$message> ), where I<$matched> is true if the condition
-matched and I<$message> describes the match, localised for the current user.
+( I<$Matched>, I<$Message>, I<$EventValue>, I<$TargetValue> ), where
+I<$Matched> is true if the condition matched, I<$Message> describes the
+match, I<$EventValue> is the value from the event that led to the result,
+and I<$TargetValue> is the value the event was checked against which let to
+the result.
 
 Appends details of the checks performed to the I<Checks> array reference,
-where each addition is an array reference of [ I<$matched>, I<$message>,
-I<$eventvalue>, I<$checkvalue> ]; I<$eventvalue> is the relevant value from
-the event, such as I<To>, and I<$checkvalue> is the value the condition was
-checking it against.
+where each addition is a hash reference of I<Matched>, I<Message>,
+I<EventValue>, I<TargetValue>, as described above and in the
+C<RT::FilterRule> B<TestRule> method.
 
 If additional parameters are supplied, they are run through B<Set> above
 before the test is performed.
 
-The I<IncludeAll> parameter, and the contents of the I<Checks> array
+The I<DescribeAll> parameter, and the contents of the I<Checks> array
 reference, are described in the documentation of the C<RT::FilterRule>
-B<Match> method.
+B<TestRule> method.
 
 =cut
 
-    sub Test {
-        my $self        = shift;
-        my %args        = ( 'Checks' => [], 'IncludeAll' => 0, @_ );
-        my @CheckValues = ();
+    sub TestCondition {
+        my $self         = shift;
+        my %args         = ( 'Checks' => [], 'DescribeAll' => 0, @_ );
+        my @TargetValues = ();
 
         $self->Set(%args);
 
-        my ( $Matched, $Message ) = ( 0, undef );
-        @CheckValues = $self->Values;
-        push @CheckValues, '' if ( scalar @CheckValues == 0 );
+        my ( $Matched, $Message, $FinalEventValue, $FinalTargetValue )
+            = ( 0, undef, '', '' );
+        @TargetValues = $self->Values;
+        push @TargetValues, '' if ( scalar @TargetValues == 0 );
 
-        foreach my $CheckValue (@CheckValues) {
+        foreach my $TargetValue (@TargetValues) {
             my ( $ValMatched, $ValMessage, $EventValue )
-                = $self->TestSingleValue( 'CheckValue' => $CheckValue );
+                = $self->TestSingleValue( 'TargetValue' => $TargetValue );
             $Message = $ValMessage if ( not defined $Message );
             push @{ $args{'Checks'} },
-                [ $ValMatched, $ValMessage, $EventValue, $CheckValue ];
-            if ($ValMatched && not $Matched) {
-                $Matched = $ValMatched;
-                $Message = $ValMessage;
-                last if ( not $args{'IncludeAll'} );
+                {
+                'Matched'     => $ValMatched,
+                'Message'     => $ValMessage,
+                'EventValue'  => $EventValue,
+                'TargetValue' => $TargetValue
+                };
+            if ( $ValMatched && not $Matched ) {
+                $Matched          = $ValMatched;
+                $Message          = $ValMessage;
+                $FinalEventValue  = $EventValue;
+                $FinalTargetValue = $TargetValue;
+                last if ( not $args{'DescribeAll'} );
             }
         }
 
         $Message = $self->loc('No match') if ( not defined $Message );
 
-        return ( $Matched, $Message );
+        return ( $Matched, $Message, $FinalEventValue, $FinalTargetValue );
     }
 
-=head2 TestSingleValue PARAMS, CheckValue => VALUE
+=head2 TestSingleValue PARAMS, TargetValue => VALUE
 
 Test the event described in the parameters against this condition, returning
 ( I<$matched>, I<$message>, I<$eventvalue> ), where only the specific
@@ -3292,7 +3503,7 @@ in the condition.
 
     sub TestSingleValue {
         my $self = shift;
-        my %args = ( 'CheckValue' => '', @_ );
+        my %args = ( 'TargetValue' => '', @_ );
 
         $self->Set(%args);
 
@@ -3312,7 +3523,7 @@ in the condition.
         my $Method = '_' . $self->ConditionType;
         if ( $self->can($Method) ) {
             ( $Matched, $Message, $EventValue )
-                = $self->$Method( 'CheckValue' => $args{'CheckValue'} );
+                = $self->$Method( 'TargetValue' => $args{'TargetValue'} );
         } elsif (
             defined $self->{'Cache'}->{'ConditionTypes'}
             ->{ $self->ConditionType }->{'Function'} )
@@ -3618,14 +3829,14 @@ Return the results of an "InQueue" condition check.
     sub _InQueue {
         my ( $self, %args ) = @_;
         my $EventValue = $self->TicketQueue || 'UNKNOWN';
-        if ( $EventValue eq $args{'CheckValue'} ) {
+        if ( $EventValue eq $args{'TargetValue'} ) {
             return ( 1, $self->loc('Queue matches'), $EventValue );
         }
         return (
             0,
             $self->loc(
                 'Ticket queue [_1] is not [_2]', $EventValue,
-                $args{'CheckValue'}
+                $args{'TargetValue'}
             ),
             $EventValue
         );
@@ -3640,14 +3851,14 @@ Return the results of a "FromQueue" condition check.
     sub _FromQueue {
         my ( $self, %args ) = @_;
         my $EventValue = $self->From || 'UNKNOWN';
-        if ( $EventValue eq $args{'CheckValue'} ) {
+        if ( $EventValue eq $args{'TargetValue'} ) {
             return ( 1, $self->loc('Original queue matches'), $EventValue );
         }
         return (
             0,
             $self->loc(
                 'Original queue [_1] is not [_2]', $EventValue,
-                $args{'CheckValue'}
+                $args{'TargetValue'}
             ),
             $EventValue
         );
@@ -3663,7 +3874,7 @@ Return the results of a "ToQueue" condition check.
         my ( $self, %args ) = @_;
         my $EventValue = $self->To || 'UNKNOWN';
         $EventValue = 'UNKNOWN' if ( not defined $EventValue );
-        if ( $EventValue eq $args{'CheckValue'} ) {
+        if ( $EventValue eq $args{'TargetValue'} ) {
             return ( 1, $self->loc('Destination queue matches'),
                 $EventValue );
         }
@@ -3671,7 +3882,7 @@ Return the results of a "ToQueue" condition check.
             0,
             $self->loc(
                 'Destination queue [_1] is not [_2]', $EventValue,
-                $args{'CheckValue'}
+                $args{'TargetValue'}
             ),
             $EventValue
         );
@@ -3693,7 +3904,7 @@ Return the results of a "RequestorEmailIs" condition check.
         foreach my $EventValue (@EventValues) {
             return ( 1, $self->loc('Requestor email address matches'),
                 $EventValue )
-                if ( lc($EventValue) eq lc( $args{'CheckValue'} ) );
+                if ( lc($EventValue) eq lc( $args{'TargetValue'} ) );
         }
 
         return ( 0, $self->loc('Requestor email address does not match'),
@@ -3717,7 +3928,7 @@ Return the results of a "RequestorEmailDomainIs" condition check.
         foreach my $EventValue (@EventValues) {
             return ( 1, $self->loc('Requestor email domain matches'),
                 $EventValue )
-                if ( lc($EventValue) eq lc( $args{'CheckValue'} ) );
+                if ( lc($EventValue) eq lc( $args{'TargetValue'} ) );
         }
 
         return ( 0, $self->loc('Requestor email domain does not match'),
@@ -3740,7 +3951,7 @@ Return the results of a "RecipientEmailIs" condition check.
         foreach my $EventValue (@EventValues) {
             return ( 1, $self->loc('Recipient email address matches'),
                 $EventValue )
-                if ( lc($EventValue) eq lc( $args{'CheckValue'} ) );
+                if ( lc($EventValue) eq lc( $args{'TargetValue'} ) );
         }
 
         return ( 0, $self->loc('Recipient email address does not match'),
@@ -3759,7 +3970,7 @@ Return the results of a "SubjectContains" condition check.
         my $EventValue = $self->TicketSubject;
         $EventValue = '' if ( not defined $EventValue );
 
-        if ( index( lc($EventValue), lc( $args{'CheckValue'} ) ) >= 0 ) {
+        if ( index( lc($EventValue), lc( $args{'TargetValue'} ) ) >= 0 ) {
             return ( 1, $self->loc('Subject matches'), $EventValue );
         }
 
@@ -3778,7 +3989,7 @@ Return the results of a "SubjectOrBodyContains" condition check.
         my $EventValue = $self->TicketSubject;
         $EventValue = '' if ( not defined $EventValue );
 
-        if ( index( lc($EventValue), lc( $args{'CheckValue'} ) ) >= 0 ) {
+        if ( index( lc($EventValue), lc( $args{'TargetValue'} ) ) >= 0 ) {
             return ( 1, $self->loc('Subject matches'), $EventValue );
         }
 
@@ -3786,7 +3997,7 @@ Return the results of a "SubjectOrBodyContains" condition check.
         $EventValue = $self->TicketFirstCommentText;
         $EventValue = '' if ( not defined $EventValue );
 
-        if ( index( lc($EventValue), lc( $args{'CheckValue'} ) ) >= 0 ) {
+        if ( index( lc($EventValue), lc( $args{'TargetValue'} ) ) >= 0 ) {
             return ( 1, $self->loc('Message body matches'), $EventValue );
         }
 
@@ -3809,7 +4020,7 @@ Return the results of a "BodyContains" condition check.
         my $EventValue = $self->TicketFirstCommentText;
         $EventValue = '' if ( not defined $EventValue );
 
-        if ( index( lc($EventValue), lc( $args{'CheckValue'} ) ) >= 0 ) {
+        if ( index( lc($EventValue), lc( $args{'TargetValue'} ) ) >= 0 ) {
             return ( 1, $self->loc('Message body matches'), $EventValue );
         }
 
@@ -3857,7 +4068,7 @@ Return the results of a "PriorityIs" condition check.
         my ( $self, %args ) = @_;
         my $EventValue = $self->TicketPriority;
         return ( 1, $self->loc('Priority matches'), $EventValue )
-            if ( $args{'CheckValue'} eq $EventValue );
+            if ( $args{'TargetValue'} eq $EventValue );
         return ( 0, $self->loc('Priority does not match'), $EventValue );
     }
 
@@ -3875,16 +4086,18 @@ Return the results of a "PriorityUnder" condition check.
             if ( $EventValue !~ /^\d+$/ );
         return ( 0, $self->loc('Priority to test against is not numeric'),
             $EventValue )
-            if ( $args{'CheckValue'} !~ /^\d+$/ );
+            if ( $args{'TargetValue'} !~ /^\d+$/ );
 
         return ( 1,
-            $self->loc( 'Priority is under [_1]', $args{'CheckValue'} ),
+            $self->loc( 'Priority is under [_1]', $args{'TargetValue'} ),
             $EventValue )
-            if ( $EventValue < $args{'CheckValue'} );
+            if ( $EventValue < $args{'TargetValue'} );
 
-        return ( 0,
-            $self->loc( 'Priority is not under [_1]', $args{'CheckValue'} ),
-            $EventValue );
+        return (
+            0,
+            $self->loc( 'Priority is not under [_1]', $args{'TargetValue'} ),
+            $EventValue
+        );
     }
 
 =head2 _PriorityOver
@@ -3901,15 +4114,15 @@ Return the results of a "PriorityOver" condition check.
             if ( $EventValue !~ /^\d+$/ );
         return ( 0, $self->loc('Priority to test against is not numeric'),
             $EventValue )
-            if ( $args{'CheckValue'} !~ /^\d+$/ );
+            if ( $args{'TargetValue'} !~ /^\d+$/ );
 
         return ( 1,
-            $self->loc( 'Priority is over [_1]', $args{'CheckValue'} ),
+            $self->loc( 'Priority is over [_1]', $args{'TargetValue'} ),
             $EventValue )
-            if ( $EventValue > $args{'CheckValue'} );
+            if ( $EventValue > $args{'TargetValue'} );
 
         return ( 0,
-            $self->loc( 'Priority is not over [_1]', $args{'CheckValue'} ),
+            $self->loc( 'Priority is not over [_1]', $args{'TargetValue'} ),
             $EventValue );
     }
 
@@ -3926,7 +4139,7 @@ Return the results of a "CustomFieldIs" condition check.
             = $self->TicketCustomFieldValue( $args{'CustomField'} );
         $EventValue = '' if ( not defined $EventValue );
 
-        if ( lc($EventValue) eq lc( $args{'CheckValue'} ) ) {
+        if ( lc($EventValue) eq lc( $args{'TargetValue'} ) ) {
             return (
                 1,
                 $self->loc(
@@ -3960,7 +4173,7 @@ Return the results of a "CustomFieldContains" condition check.
             = $self->TicketCustomFieldValue( $args{'CustomField'} );
         $EventValue = '' if ( not defined $EventValue );
 
-        if ( index( lc($EventValue), lc( $args{'CheckValue'} ) ) >= 0 ) {
+        if ( index( lc($EventValue), lc( $args{'TargetValue'} ) ) >= 0 ) {
             return (
                 1,
                 $self->loc(
@@ -3991,7 +4204,7 @@ Return the results of a "StatusIs" condition check.
         my ( $self, %args ) = @_;
         my $EventValue = $self->TicketStatus;
         return ( 1, $self->loc('Status matches'), $EventValue )
-            if ( lc( $args{'CheckValue'} ) eq lc($EventValue) );
+            if ( lc( $args{'TargetValue'} ) eq lc($EventValue) );
         return ( 0, $self->loc('Status does not match'), $EventValue );
     }
 
@@ -4090,7 +4303,7 @@ The C<RT::Ticket> object to perform the action on
 =back
 
 Finally, B<Cache> should be set to a hash reference, which should be
-shared across all B<Test> or T<TestSingleValue> calls for this event;
+shared across all B<Test> or B<TestSingleValue> calls for this event;
 lookups such as ticket subject, custom field ID to name mappings, and so on,
 will be cached here so that they don't have to be done multiple times.
 
