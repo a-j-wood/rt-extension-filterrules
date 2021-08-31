@@ -432,16 +432,33 @@ sub ScripCommit {
         );
     }
 
+    # Keep track of the filter rule IDs we've performed actions on.
+    #
+    my %ActionedRules = ();
+
     # Perform the non-notification actions we have accumulated.
     #
-    foreach ( grep { not $_->IsNotification } @$Actions ) {
-        $_->Perform();
+    foreach ( grep { not $_->{'Action'}->IsNotification } @$Actions ) {
+        $_->{'Action'}->Perform( $_->{'FilterRule'} );
+        $ActionedRules{ $_->{'FilterRule'}->id } = 1;
     }
 
     # Perform the notification actions we have accumulated.
     #
-    foreach ( grep { $_->IsNotification } @$Actions ) {
-        $_->Perform();
+    foreach ( grep { $_->{'Action'}->IsNotification } @$Actions ) {
+        $_->{'Action'}->Perform( $_->{'FilterRule'} );
+        $ActionedRules{ $_->{'FilterRule'}->id } = 1;
+    }
+
+    # Set an attribute on this ticket for each action we have taken to avoid
+    # recursion.
+    #
+    my $Epoch = 0 + time;
+    foreach ( keys %ActionedRules ) {
+        $Action->TicketObj->SetAttribute(
+            'Name'    => 'FilterRules-' . $_,
+            'Content' => $Epoch
+        );
     }
 
     return 1;
@@ -1471,13 +1488,13 @@ entries, and for the event structure.
                 'DescribeAll' => $args{'DescribeAll'},
                 'Cache'       => $args{'Cache'}
                 );
-            if ($ItemMatch) {
+            if ( $ItemMatch && not $Matched ) {
                 ( $Matched, $Message, $FinalEventValue, $FinalTargetValue )
                     = (
                     $ItemMatch,      $ItemMessage,
                     $ItemEventValue, $ItemTargetValue
                     );
-                last;
+                last if ( not $args{'DescribeAll'} );
             }
         }
 
@@ -2857,13 +2874,13 @@ The C<RT::FilterRule::Action> object describing this action
             $ConditionCheck->{'Matched'} = $Matched;
             push @{ $RuleCheck->{'Conflicts'} }, $ConditionCheck;
 
-            if ($Matched) {
+            if ( $Matched && not $ConflictFound ) {
                 $ConflictFound              = 1;
                 $RuleCheck->{'Message'}     = $Message;
                 $RuleCheck->{'EventValue'}  = $EventValue;
                 $RuleCheck->{'TargetValue'} = $TargetValue;
                 $RuleCheck->{'MatchType'}   = 'Conflict';
-                last;
+                last if ( not $args{'DescribeAll'} );
             }
         }
 
@@ -2889,16 +2906,20 @@ The C<RT::FilterRule::Action> object describing this action
 
                 if ($Matched) {
                     $MatchFound = 1;
-                } else {
+                } elsif ( not $MatchFailed ) {
                     $MatchFailed                = 1;
                     $RuleCheck->{'Message'}     = $Message;
                     $RuleCheck->{'EventValue'}  = $EventValue;
                     $RuleCheck->{'TargetValue'} = $TargetValue;
                     $RuleCheck->{'MatchType'}   = 'Requirement';
-                    last;
+                    last if ( not $args{'DescribeAll'} );
                 }
             }
 
+            # The rule only matches if there were no failures and we did
+            # find at least one matching conditionl, so any empty
+            # requirements list means no match.
+            #
             if ( $MatchFailed == 0 && $MatchFound ) {
                 $RuleCheck->{'Matched'} = 1;
                 $RuleCheck->{'Message'} = $self->loc('All requirements met');
@@ -2912,6 +2933,8 @@ The C<RT::FilterRule::Action> object describing this action
 
         push @{ $args{'RuleChecks'} }, $RuleCheck;
 
+        # If the rule matched, add its actions.
+        #
         if ( $RuleCheck->{'Matched'} ) {
             foreach my $Action ( $self->Actions ) {
                 push @{ $args{'Actions'} },
@@ -3507,6 +3530,8 @@ in the condition.
 
         $self->Set(%args);
 
+        # Map condition types to their definitions.
+        #
         if ( not $self->{'Cache'}->{'ConditionTypes'} ) {
             $self->{'Cache'}->{'ConditionTypes'} = {
                 map { $_->{'ConditionType'}, $_ }
@@ -4325,18 +4350,41 @@ This method returns nothing.
         return 1;
     }
 
-=head2 Perform
+=head2 Perform FILTERRULE
 
-Perform the action described by this object's parameters, returning
-( I<$ok>, I<$message> ).
+Perform the action described by this object's parameters, returning (
+I<$ok>, I<$message> ), checking that the associated ticket has not recently
+been touched by the same filter rule to avoid recursion.
 
 =cut
 
     sub Perform {
-        my ( $self, %args ) = @_;
+        my ( $self, $FilterRule ) = @_;
 
-        $self->Set(%args);
+        # Check that an action for this filter rule has not recently been
+        # performed already.
+        #
+        my $AttributeName = 'FilterRules-' . $FilterRule->id;
+        my $Attribute
+            = $self->{'Cache'}->{'Ticket'}->FirstAttribute($AttributeName);
+        my $Epoch = ( $Attribute ? $Attribute->Content : 0 ) || 0;
+        if ( $Epoch > ( time - 60 ) ) {
+            RT->Logger->warning(
+                      'RT::Extension::FilterRule: Skipping action for rule #'
+                    . $FilterRule->id
+                    . ' on ticket '
+                    . $self->{'Cache'}->{'Ticket'}->id
+                    . ' - recently activated' );
+            return (
+                0,
+                $self->loc(
+                    'This rule has already been recently activated on this ticket'
+                )
+            );
+        }
 
+        # Map action types to their definitions.
+        #
         if ( not $self->{'Cache'}->{'ActionTypes'} ) {
             $self->{'Cache'}->{'ActionTypes'} = {
                 map { $_->{'ActionType'}, $_ }
