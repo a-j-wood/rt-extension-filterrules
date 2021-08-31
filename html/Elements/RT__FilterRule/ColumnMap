@@ -45,6 +45,36 @@ my $COLUMN_MAP = {
                 : $_[0]->loc('Continue');
         },
     },
+    'Conflicts' => {
+        'title'     => 'Conflicts',                  # loc
+        'attribute' => 'Conflicts',
+        'value'     => sub {
+            my $HTML = $_[0]->DescribeConflicts;
+            return \$HTML;
+        },
+    },
+    'Requirements' => {
+        'title'     => 'Requirements',               # loc
+        'attribute' => 'Requirements',
+        'value'     => sub {
+            my $HTML = $_[0]->DescribeRequirements;
+            return \$HTML;
+        },
+    },
+    'Actions' => {
+        'title'     => 'Actions',                    # loc
+        'attribute' => 'Actions',
+        'value'     => sub {
+            my $HTML = $_[0]->DescribeActions;
+            return \$HTML;
+        },
+    },
+    'MatchCounts' => {
+        'title' => 'Match Counts',                   # loc
+        'value' => sub {
+            return 'TODO: writeme';
+        },
+    },
     'MoveFilterRule' => {
         title => 'Move',                             # loc
         value => sub {

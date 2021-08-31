@@ -7,12 +7,24 @@ return if ( not defined $session{'CurrentUser'} );
 return if ( not defined $session{'CurrentUser'}->id );
 return if ( not $session{'CurrentUser'}->Privileged );
 
+my $request_path = $HTML::Mason::Commands::r->path_info;
+$request_path =~ s!/{2,}!/!g;
+
 Menu->child('tools')->child(
     'FilterRules',
     'title'       => loc('Filter rules'),
     'description' => loc('Manage ticket filtering rules'),
     'path'        => '/Tools/FilterRules.html'
 );
+
+if ( $request_path =~ m|^/Tools/FilterRules.html| ) {
+    PageMenu()->child(
+        'FilterRules',
+        'title'       => loc('Filter rules'),
+        'description' => loc('Manage ticket filtering rules'),
+        'path'        => '/Tools/FilterRules.html'
+    );
+}
 
 if ( $session{'CurrentUser'}
        ->HasRight( Right => 'ShowConfigTab', Object => RT->System )
@@ -35,9 +47,6 @@ if ( $session{'CurrentUser'}
         'title' => loc('Create'),
         'path'  => '/Admin/FilterRules/Modify.html?Create=1'
     );
-
-    my $request_path = $HTML::Mason::Commands::r->path_info;
-    $request_path =~ s!/{2,}!/!g;
 
     if ( $request_path =~ m{^/Admin/FilterRules} ) {
         my $Menu = PageMenu();
@@ -87,9 +96,14 @@ if ( $session{'CurrentUser'}
                     'path' => '/Admin/FilterRules/Modify.html?id=' . $id
                 );
                 $Menu->child(
-                    'conditions',
-                    title  => loc('Conditions'),
-                    'path' => '/Admin/FilterRules/Conditions.html?id=' . $id
+                    'requirements',
+                    title  => loc('Requirements'),
+                    'path' => '/Admin/FilterRules/Requirements.html?id=' . $id
+                );
+                $Menu->child(
+                    'filters',
+                    title  => loc('Filters'),
+                    'path' => '/Admin/FilterRules/Filters.html?id=' . $id
                 );
                 $Menu->child(
                     'group-rights',

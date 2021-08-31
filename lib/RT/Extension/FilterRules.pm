@@ -30,6 +30,10 @@ filter rule group will end, and the next rule group will then be considered.
 
 Filter rules are managed under I<Tools> - I<Filter rules>.
 
+=head1 REQUIREMENTS
+
+Requires C<Email::Address> and C<HTML::FormatText>.
+
 =head1 RT VERSION
 
 Known to work with RT 4.2.16, 4.4.4, and 5.0.1.
@@ -212,14 +216,14 @@ Once you have more than one, you can move them up and down in the list to
 control the order in which they are processed, using the I<Up> and I<Down>
 links at the right.
 
-=head2 Set the conditions for the filter rule group
+=head2 Set the requirements for the filter rule group
 
-A filter rule group will not process any messages unless its conditions are
-met.  Each one starts off with no conditions, so will remain inactive until
-you define some.
+A filter rule group will not process any messages unless its requirements
+are met.  Each one starts off with no requirements, so will remain inactive
+until you define some.
 
 From I<Admin> - I<Filter rule groups>, click on your new filter rule group,
-and then choose I<Conditions> from the page menu at the top.
+and then choose I<Requirements> from the page menu at the top.
 
 (TODO)
 
@@ -404,12 +408,12 @@ sub ScripCommit {
     );
 
     # Check the filter rules in each filter rule group whose group
-    # conditions are met, building up a list of actions to perform.
+    # requirements are met, building up a list of actions to perform.
     #
     while ( $FilterRuleGroup = $FilterRuleGroups->Next ) {
         next
             if (
-            not $FilterRuleGroup->CheckGroupConditions(
+            not $FilterRuleGroup->CheckGroupRequirements(
                 'Matches'         => [],
                 'TriggerType'     => $TriggerType,
                 'From'            => $QueueFrom,
@@ -477,9 +481,12 @@ I<None>, I<String>, I<Integer>, I<Email>, I<Queue>, or I<Status>
 =item B<Function>
 
 If present, this is a code reference which will be called to check this
-condition; this code reference will be passed a hash of the parameters from
-inside an C<RT::FilterRule::Condition> object, plus I<Check>, as it will be
-called from the B<TestSingleValue> method of C<RT::FilterRule::Condition>
+condition; this code reference will be passed an C<RT::CurrentUser> object
+and a hash of the parameters from inside an C<RT::FilterRule::Condition>
+object (including I<CheckValue>), as it will be called from the
+B<TestSingleValue> method of C<RT::FilterRule::Condition> - like
+B<TestSingleValue>, it should return ( I<$matched>, I<$message>,
+I<$eventvalue> ).
 
 =back
 
@@ -549,11 +556,6 @@ sub ConditionTypes {
         {   'ConditionType' => 'BodyContains',
             'Name'          => $UserObj->loc('Message body contains'),
             'TriggerTypes'  => [],
-            'ValueType'     => 'String'
-        },
-        {   'ConditionType' => 'HeaderContains',
-            'Name'          => $UserObj->loc('Any message header contains'),
-            'TriggerTypes'  => ['Create'],
             'ValueType'     => 'String'
         },
         {   'ConditionType' => 'HasAttachment',
@@ -627,9 +629,10 @@ I<String>, I<Integer>, I<Email>, I<Group>, I<Queue>, I<Status>, or I<HTML>
 =item B<Function>
 
 If present, this is a code reference which will be called to perform this
-action; this code reference will be passed a hash of the parameters from
-inside an C<RT::FilterRule::Action> object, as it will be called from the
-B<Perform> method of C<RT::FilterRule::Action>
+action; this code reference will be passed an C<RT::CurrentUser> object and
+a hash of the parameters from inside an C<RT::FilterRule::Action> object, as
+it will be called from the B<Perform> method of C<RT::FilterRule::Action> -
+it should return ( I<$ok>, I<$message> )
 
 =back
 
@@ -811,7 +814,7 @@ sub AddActionProvider {
 
 This package provides the C<RT::FilterRuleGroup> class, which describes a
 group of filter rules through which a ticket will be passed if it meets the
-basic conditions of the group.
+basic requirements of the group.
 
 The attributes of this class are:
 
@@ -875,10 +878,11 @@ unless this property is true
 
 =back
 
-The basic conditions of the filter rule group are defined by its
-B<GroupConditions>, which is a collection of C<RT::FilterRule> objects whose
-B<IsGroupCondition> attribute is true.  If I<any> of these rules match, the
-ticket is eligible to be passed through the rules for this group.
+The basic requirements of the filter rule group are defined by its
+B<GroupRequirements>, which is a collection of C<RT::FilterRule> objects
+whose B<IsGroupRequirement> attribute is true.  If I<any> of these rules
+match, the ticket is eligible to be passed through the filter rules for this
+group.
 
 The filter rules for this group are presented via B<FilterRules>, which is a
 collection of C<RT::FilterRule> objects.
@@ -1254,15 +1258,16 @@ Returns ( I<$ok>, I<$message> ).
         );
     }
 
-=head2 GroupConditions
+=head2 GroupRequirements
 
-Return an C<RT::FilterRules> collection object containing the conditions of
-this filter rule group - if an event meets any of these conditions, then the
-caller should process the event through the B<FilterRules> for this group.
+Return an C<RT::FilterRules> collection object containing the requirements
+of this filter rule group - if an event matches any of these requirement
+rules, then the caller should process the event through the B<FilterRules>
+for this group.
 
 =cut
 
-    sub GroupConditions {
+    sub GroupRequirements {
         my ($self) = @_;
 
         my $Collection = RT::FilterRules->new( $self->CurrentUser );
@@ -1273,7 +1278,7 @@ caller should process the event through the B<FilterRules> for this group.
             'OPERATOR' => '='
         );
         $Collection->Limit(
-            'FIELD'    => 'IsGroupCondition',
+            'FIELD'    => 'IsGroupRequirement',
             'VALUE'    => 1,
             'OPERATOR' => '='
         );
@@ -1281,15 +1286,15 @@ caller should process the event through the B<FilterRules> for this group.
         return $Collection;
     }
 
-=head2 AddGroupCondition Name => NAME, ...
+=head2 AddGroupRequirement Name => NAME, ...
 
-Add a condition to this filter rule group; calls the C<RT::FilterRule>
-B<Create> method, overriding the I<FilterRuleGroup> and I<IsGroupCondition>
-parameters, and returns its output.
+Add a requirement rule to this filter rule group; calls the
+C<RT::FilterRule> B<Create> method, overriding the I<FilterRuleGroup> and
+I<IsGroupRequirement> parameters, and returns its output.
 
 =cut
 
-    sub AddGroupCondition {
+    sub AddGroupRequirement {
         my $self = shift;
         my %args = (@_);
         my $Object;
@@ -1298,8 +1303,8 @@ parameters, and returns its output.
 
         return $Object->Create(
             %args,
-            'FilterRuleGroup'  => $self->id,
-            'IsGroupCondition' => 1
+            'FilterRuleGroup'    => $self->id,
+            'IsGroupRequirement' => 1
         );
     }
 
@@ -1321,7 +1326,7 @@ for this rule group.
             'OPERATOR' => '='
         );
         $Collection->Limit(
-            'FIELD'    => 'IsGroupCondition',
+            'FIELD'    => 'IsGroupRequirement',
             'VALUE'    => 0,
             'OPERATOR' => '='
         );
@@ -1332,7 +1337,7 @@ for this rule group.
 =head2 AddFilterRule Name => NAME, ...
 
 Add a filter rule to this filter rule group; calls the C<RT::FilterRule>
-B<Create> method, overriding the I<FilterRuleGroup> and I<IsGroupCondition>
+B<Create> method, overriding the I<FilterRuleGroup> and I<IsGroupRequirement>
 parameters, and returns its output.
 
 =cut
@@ -1346,8 +1351,8 @@ parameters, and returns its output.
 
         return $Object->Create(
             %args,
-            'FilterRuleGroup'  => $self->id,
-            'IsGroupCondition' => 0
+            'FilterRuleGroup'    => $self->id,
+            'IsGroupRequirement' => 0
         );
     }
 
@@ -1362,9 +1367,9 @@ Delete this filter rule group, and all of its filter rules.  Returns
         my ($self) = @_;
         my ( $Collection, $Item );
 
-        # Delete the group conditions.
+        # Delete the group requirements.
         #
-        $Collection = $self->GroupConditions();
+        $Collection = $self->GroupRequirements();
         $Collection->FindAllRows();
         $Collection->GotoFirstItem();
         while ( $Item = $Collection->Next ) {
@@ -1393,16 +1398,16 @@ Delete this filter rule group, and all of its filter rules.  Returns
         return $self->SUPER::Delete();
     }
 
-=head2 CheckGroupConditions Matches => [], TriggerType => ...,
+=head2 CheckGroupRequirements Matches => [], TriggerType => ...,
 
-For the given event, append details of matching group conditions to the
+For the given event, append details of matching group requirements to the
 I<Matches> array reference.
 
 A I<Ticket> should be supplied, either as an ID or as an C<RT::Ticket> object.
 
-Returns true if there were any matches (meaning that the caller should pass
-the event through this filter rule group's B<FilterRules>), false if there
-were no matches.
+Returns true if there were any requirement rule matches (meaning that the
+caller should pass the event through this filter rule group's
+B<FilterRules>), false if there were no matches.
 
 If I<IncludeDisabled> is true, then even rules marked as disabled will be
 checked.  The default is false.
@@ -1412,7 +1417,7 @@ entries, and the event structure.
 
 =cut
 
-    sub CheckGroupConditions {
+    sub CheckGroupRequirements {
         my $self = shift;
         my %args = (
             'Matches'         => [],
@@ -1425,7 +1430,7 @@ entries, and the event structure.
         );
         my ( $Collection, $Item );
 
-        $Collection = $self->GroupConditions();
+        $Collection = $self->GroupRequirements();
         $Collection->FindAllRows();
         $Collection->Limit(
             'FIELD'    => 'Disabled',
@@ -1465,7 +1470,7 @@ If I<RecordMatch> is true, then the fact that a rule is matched will be
 recorded in the database (see C<RT::FilterRuleMatch>).  The default is not
 to record the match.
 
-Returns true if there were any matches, false otherwise.
+Returns true if there were any filter rule matches, false otherwise.
 
 See B<RT::FilterRule::Match> for the structure of the I<Matches> and
 I<Actions> array entries, and the event structure.
@@ -1827,8 +1832,8 @@ collection of filter rule groups.
 =head1 Internal package RT::FilterRule
 
 This package provides the C<RT::FilterRule> class, which describes a filter
-rule - the conditions it must not meet, the conditions it must meet, and the
-actions to perform on the ticket if the rule matches.
+rule - the conditions it must meet, the conditions it must I<not> meet, and
+the actions to perform on the ticket if the rule matches.
 
 The attributes of this class are:
 
@@ -1844,17 +1849,18 @@ The numeric ID of the filter rule group to which this filter rule belongs
 (also presented as an C<RT::FilterRuleGroup> object via
 B<FilterRuleGroupObj>)
 
-=item B<IsGroupCondition>
+=item B<IsGroupRequirement>
 
-Whether this is a filter rule which describes conditions under which the
-filter rule group as a whole is applicable (true), or a filter rule for
+Whether this is a filter rule which describes requirements for the filter
+rule group as a whole to be applicable (true), or a filter rule for
 processing an event through and performing actions if matched (false).
 
-This is true for filter rules under a rule group's B<GroupConditions>, and
-false for filter rules under a rule group's B<FilterRules>.
+This is true for requirement rules under a rule group's
+B<GroupRequirements>, and false for filter rules under a rule group's
+B<FilterRules>.
 
 This attribute is set automatically when a C<RT::FilterRule> object is
-created via the B<AddGroupCondition> and B<AddFilterRule> methods of
+created via the B<AddGroupRequirement> and B<AddFilterRule> methods of
 C<RT::FilterRuleGroup>.
 
 =item B<SortOrder>
@@ -1889,21 +1895,21 @@ group should be skipped if this rule matches
 
 =item B<Conflicts>
 
-Conditions which, if met, mean this rule cannot match; this is presented as
-an array of C<RT::FilterRule::Condition> objects, and stored as
+Conditions which, if I<any> are met, mean this rule cannot match; this is
+presented as an array of C<RT::FilterRule::Condition> objects, and stored as
 a Base64-encoded string encoding an array ref containing hash refs.
 
 =item B<Requirements>
 
-Conditions which, if any are met, mean this rule matches, so long as none of
-the conflict conditions above have matched; this is also presented as an
-array of C<RT::FilterRule::Condition> objects, and stored in the
-same way as above.
+Conditions which, if I<all> are met, mean this rule matches, so long as none
+of the conflict conditions above have matched; this is also presented as an
+array of C<RT::FilterRule::Condition> objects, and stored in the same way as
+above.
 
 =item B<Actions>
 
 Actions to carry out on the ticket if the rule matches (this field is unused
-for filter rule group applicability rules, i.e.  where B<IsGroupCondition>
+for filter rule group applicability rules, i.e.  where B<IsGroupRequirement>
 is 1); it is presented as an array of C<RT::FilterRule::Action>
 objects, and stored as a Base64-encoded string encoding an array ref
 containing hash refs.
@@ -1968,15 +1974,15 @@ which will be undefined if there was a problem.
     sub Create {
         my $self = shift;
         my %args = (
-            'FilterRuleGroup'  => 0,
-            'IsGroupCondition' => 0,
-            'Name'             => '',
-            'TriggerType'      => '',
-            'StopIfMatched'    => 0,
-            'Conflicts'        => '',
-            'Requirements'     => '',
-            'Actions'          => '',
-            'Disabled'         => 0,
+            'FilterRuleGroup'    => 0,
+            'IsGroupRequirement' => 0,
+            'Name'               => '',
+            'TriggerType'        => '',
+            'StopIfMatched'      => 0,
+            'Conflicts'          => '',
+            'Requirements'       => '',
+            'Actions'            => '',
+            'Disabled'           => 0,
             @_
         );
 
@@ -2006,8 +2012,8 @@ which will be undefined if there was a problem.
             $args{$Attribute} = $Value;
         }
 
-        # Normalise IsGroupCondition to 1 or 0
-        $args{'IsGroupCondition'} = $args{'IsGroupCondition'} ? 1 : 0;
+        # Normalise IsGroupRequirement to 1 or 0
+        $args{'IsGroupRequirement'} = $args{'IsGroupRequirement'} ? 1 : 0;
 
         $args{'SortOrder'} = 1;
 
@@ -2021,8 +2027,8 @@ which will be undefined if there was a problem.
             'OPERATOR' => '='
         );
         $AllFilterRules->Limit(
-            'FIELD'    => 'IsGroupCondition',
-            'VALUE'    => $args{'IsGroupCondition'},
+            'FIELD'    => 'IsGroupRequirement',
+            'VALUE'    => $args{'IsGroupRequirement'},
             'OPERATOR' => '='
         );
         $AllFilterRules->OrderByCols(
@@ -2075,7 +2081,7 @@ rule group.
 =head2 Conflicts
 
 Return an array of C<RT::FilterRule::Condition> objects describing the
-conditions which, if any are met, mean this rule cannot match.
+conditions which, if I<any> are met, mean this rule cannot match.
 
 =cut
 
@@ -2111,7 +2117,7 @@ conditions which, if any are met, mean this rule cannot match.
 
 =head2 SetConflicts CONDITION, CONDITION, ...
 
-Set the conditions which, if any are met, mean this rule cannot match. 
+Set the conditions which, if I<any> are met, mean this rule cannot match. 
 Expects an array of C<RT::FilterRule::Condition> objects.
 
 =cut
@@ -2141,11 +2147,39 @@ Expects an array of C<RT::FilterRule::Condition> objects.
         );
     }
 
+=head2 DescribeConflicts
+
+Return HTML, localised to the current user, describing the conflict
+conditions.  Uses B<DescribeConditions>.
+
+=cut
+
+    sub DescribeConflicts {
+        my ($self) = @_;
+
+        my $HTML
+            = $self->DescribeConditions( $self->loc('OR'), $self->Conflicts );
+
+        if ( $HTML eq '' ) {
+            $HTML = '<em>'
+                . $HTML::Mason::Commands::m->interp->apply_escapes(
+                $self->loc(
+                    'No conflict conditions - rule will match if requirements are met'
+                ),
+                'h'
+                ) . '</em>';
+        } else {
+            $HTML = $self->loc('Do not match if') . ':<br />';
+        }
+
+        return $HTML;
+    }
+
 =head2 Requirements
 
 Return an array of C<RT::FilterRule::Condition> objects describing the
-conditions which, if any are met, mean this rule matches, so long as none of
-the conflict conditions above have matched.
+conditions which, if I<all> are met, mean this rule matches, so long as none
+of the conflict conditions above have matched.
 
 =cut
 
@@ -2182,8 +2216,8 @@ the conflict conditions above have matched.
 
 =head2 SetRequirements CONDITION, CONDITION, ...
 
-Set the conditions which, if any are met, mean this rule matches, so long as
-none of the conflict conditions above have matched.  Expects an array of
+Set the conditions which, if I<all> are met, mean this rule matches, so long
+as none of the conflict conditions above have matched.  Expects an array of
 C<RT::FilterRule::Condition> objects.
 
 =cut
@@ -2211,6 +2245,127 @@ C<RT::FilterRule::Condition> objects.
             'Field' => 'Requirements',
             'Value' => $NewValue
         );
+    }
+
+=head2 DescribeRequirements
+
+Return HTML, localised to the current user, describing the requirement
+conditions.  Uses B<DescribeConditions>.
+
+=cut
+
+    sub DescribeRequirements {
+        my ($self) = @_;
+
+        my $HTML = $self->DescribeConditions( $self->loc('AND'),
+            $self->Requirements );
+
+        if ( $HTML eq '' ) {
+            $HTML = '<em>'
+                . $HTML::Mason::Commands::m->interp->apply_escapes(
+                $self->loc(
+                    'No requirement conditions - rule will never match'),
+                'h'
+                ) . '</em>';
+        } else {
+            $HTML = $self->loc('Match if') . ':<br />';
+        }
+
+        return $HTML;
+    }
+
+=head2 DescribeConditions AGGREGATOR, CONDITION, ...
+
+Return HTML, localised to the current user, describing the given conditions,
+with the given aggregator word (such as "or" or "and") between each one.
+
+This is called by B<DescribeConflicts> and B<DescribeRequirements>.
+
+Uses C<$HTML::Mason::Commands::m>'s B<notes> method for caching, as this is
+only expected to be called from user-facing components.
+
+=cut
+
+    sub DescribeConditions {
+        my ( $self, $Aggregator, @Conditions ) = @_;
+
+        my $ConditionTypeName = $HTML::Mason::Commands::m->notes(
+            'FilterRules-ConditionTypeName');
+        if ( not $ConditionTypeName ) {
+            $ConditionTypeName = {};
+            my @ConditionTypes = RT::Extension::FilterRules->ConditionTypes(
+                $self->CurrentUser );
+            foreach (@ConditionTypes) {
+                $ConditionTypeName->{ $_->{'ConditionType'} } = $_->{'Name'};
+            }
+            $HTML::Mason::Commands::m->notes( 'FilterRules-ConditionTypeName',
+                $ConditionTypeName );
+        }
+
+        my $HTML = '';
+
+        my $CustomFieldObj = RT::CustomField->new( $self->CurrentUser );
+        my $QueueObj       = RT::Queue->new( $self->CurrentUser );
+
+        foreach my $Condition (@Conditions) {
+            $HTML .= '<br /><em>'
+                . $HTML::Mason::Commands::m->interp->apply_escapes(
+                $Aggregator, 'h' )
+                . '</em> '
+                if ( $HTML ne '' );
+            if ( $Condition->ConditionType =~ /CustomField/ ) {
+                if ( $CustomFieldObj->Load( $Condition->CustomField ) ) {
+                    $HTML .= '"'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $CustomFieldObj->Name, 'h' )
+                        . '"';
+                } else {
+                    $HTML .= '"#'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $Condition->CustomField, 'h' )
+                        . '"';
+                }
+                $HTML .= ' ';
+            }
+            $HTML .= $HTML::Mason::Commands::m->interp->apply_escapes(
+                (          $ConditionTypeName->{ $Condition->ConditionType }
+                        || $Condition->ConditionType
+                ),
+                'h'
+            );
+
+            my @Values = $Condition->Values;
+
+            if ( $Condition->ValueType eq 'Queue' ) {
+                @Values = map {
+                    my $x = $QueueObj->Load($_) ? $QueueObj->Name : '#' . $_;
+                    '"'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $x, 'h' )
+                        . '"';
+                } @Values;
+            } elsif ( $Condition->ValueType ne 'None' ) {
+                @Values = map {
+                    '"'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $_, 'h' )
+                        . '"'
+                } @Values;
+            }
+
+            if ( scalar @Values > 0 ) {
+                $HTML .= ': '
+                    . join(
+                    ' <em>'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $self->loc('OR'), 'h' )
+                        . '</em> ',
+                    @Values
+                    );
+            }
+        }
+
+        return $HTML;
     }
 
 =head2 Actions
@@ -2252,7 +2407,7 @@ to carry out on the ticket if the rule matches.
 
 Set the actions to carry out on the ticket if the rule matches; this field
 is unused for filter rule group applicability rules (where
-B<IsGroupCondition> is 1).  Expects an array of C<RT::FilterRule::Action>
+B<IsGroupRequirement> is 1).  Expects an array of C<RT::FilterRule::Action>
 objects.
 
 =cut
@@ -2280,6 +2435,131 @@ objects.
             'Field' => 'Actions',
             'Value' => $NewValue
         );
+    }
+
+=head2 DescribeActions
+
+Return HTML, localised to the current user, describing this filter rule's
+actions.
+
+Uses C<$HTML::Mason::Commands::m>'s B<notes> method for caching, as this is
+only expected to be called from user-facing components.
+
+=cut
+
+    sub DescribeActions {
+        my ($self) = @_;
+
+        my $ActionTypeName
+            = $HTML::Mason::Commands::m->notes('FilterRules-ActionNameMap');
+        if ( not $ActionTypeName ) {
+            $ActionTypeName = {};
+            my @ActionTypes = RT::Extension::FilterRules->ActionTypes(
+                $self->CurrentUser );
+            foreach (@ActionTypes) {
+                $ActionTypeName->{ $_->{'ActionType'} } = $_->{'Name'};
+            }
+            $HTML::Mason::Commands::m->notes( 'FilterRules-ActionTypeName',
+                $ActionTypeName );
+        }
+
+        my $HTML = '';
+
+        my $CustomFieldObj = RT::CustomField->new( $self->CurrentUser );
+        my $QueueObj       = RT::Queue->new( $self->CurrentUser );
+
+        foreach my $Action ( $self->Actions ) {
+            $HTML .= '<li>'
+                . $HTML::Mason::Commands::m->interp->apply_escapes(
+                (          $ActionTypeName->{ $Action->ActionType }
+                        || $Action->ActionType
+                ),
+                'h'
+                );
+
+            if ( $Action->ActionType =~ /CustomField/ ) {
+                $HTML .= ' ';
+                if ( $CustomFieldObj->Load( $Action->CustomField ) ) {
+                    $HTML .= '"'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $CustomFieldObj->Name, 'h' )
+                        . '"';
+                } else {
+                    $HTML .= '"#'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $Action->CustomField, 'h' )
+                        . '"';
+                }
+                $HTML .= ' ';
+            }
+
+            if ( $Action->ValueType eq 'Queue' ) {
+                $HTML .= ': ';
+                if ( $QueueObj->Load( $Action->Value ) ) {
+                    $HTML .= '"'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $QueueObj->Name, 'h' )
+                        . '"';
+                } else {
+                    $HTML .= '"#'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $Action->Value, 'h' )
+                        . '"';
+                }
+            } elsif ( $Action->ValueType eq 'CustomField' ) {
+                $HTML .= ': ';
+                if ( $CustomFieldObj->Load( $Action->Value ) ) {
+                    $HTML .= '"'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $CustomFieldObj->Name, 'h' )
+                        . '"';
+                } else {
+                    $HTML .= '"#'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $Action->Value, 'h' )
+                        . '"';
+                }
+            } elsif ( $Action->ValueType !~ /^(None|HTML)$/ ) {
+                $HTML .= ': "'
+                    . $HTML::Mason::Commands::m->interp->apply_escapes(
+                    $Action->Value, 'h' )
+                    . '"';
+            }
+
+            if ( $Action->IsNotification ) {
+                $HTML .= ' &rarr; ';
+                if ( $Action->ActionType =~ /Group/ ) {
+                    if ( $CustomFieldObj->Load( $Action->Notify ) ) {
+                        $HTML .= '"'
+                            . $HTML::Mason::Commands::m->interp
+                            ->apply_escapes( $CustomFieldObj->Name, 'h' )
+                            . '"';
+                    } else {
+                        $HTML .= '"#'
+                            . $HTML::Mason::Commands::m->interp
+                            ->apply_escapes( $Action->Notify, 'h' ) . '"';
+                    }
+                } else {
+                    $HTML .= ': "'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $Action->Notify, 'h' )
+                        . '"';
+                }
+            }
+
+            $HTML .= "</li>\n";
+        }
+
+        if ( $HTML eq '' ) {
+            $HTML = '<em>'
+                . $HTML::Mason::Commands::m->interp->apply_escapes(
+                $self->loc('No actions defined.'), 'h' )
+                . '</em>';
+        } else {
+            $HTML = '<ul>' . $HTML . '</ul>';
+        }
+
+        return $HTML;
     }
 
 =head2 Delete
@@ -2373,14 +2653,13 @@ the following keys:
 
 =item B<Condition>
 
-The C<RT::FilterRule::Condition> object describing this
-condition
+The C<RT::FilterRule::Condition> object describing this condition
 
 =item B<Matched>
 
 Whether this condition matched (this will always be true unless
 I<IncludeAll> is true, since the condition wouldn't be included otherwise
-because all B<Requirement> conditions must be met for a rule to match)
+because I<all> B<Requirements> conditions must be met for a rule to match)
 
 =item B<Checks>
 
@@ -2424,6 +2703,8 @@ This C<RT::FilterRule> object
 The C<RT::FilterRule::Action> object describing this action
 
 =back
+
+(TODO)
 
 =cut
 
@@ -2505,8 +2786,8 @@ Change this filter rule's sort order by the given I<OFFSET>.
             'OPERATOR' => '='
         );
         $Collection->Limit(
-            'FIELD'    => 'IsGroupCondition',
-            'VALUE'    => $self->IsGroupCondition,
+            'FIELD'    => 'IsGroupRequirement',
+            'VALUE'    => $self->IsGroupRequirement,
             'OPERATOR' => '='
         );
         $Collection->FindAllRows();
@@ -2672,7 +2953,7 @@ C<RT::FilterRule> class.
                 default    => '0'
             },
 
-            'IsGroupCondition' => {
+            'IsGroupRequirement' => {
                 read       => 1,
                 write      => 1,
                 sql_type   => 5,
@@ -2824,9 +3105,9 @@ C<RT::FilterRule> class.
 
 =head1 Internal package RT::FilterRule::Condition
 
-This package provides the C<RT::FilterRule::Condition> class,
-which describes a condition in a filter rule and provides methods to match
-an event on a ticket against that condition.
+This package provides the C<RT::FilterRule::Condition> class, which
+describes a condition in a filter rule and provides methods to match an
+event on a ticket against that condition.
 
 Objects of this class are not stored directly in the database, but are
 encoded within attributes of C<RT::FilterRule> objects.
@@ -2836,6 +3117,9 @@ encoded within attributes of C<RT::FilterRule> objects.
     package RT::FilterRule::Condition;
 
     use base 'RT::Base';
+
+    use Email::Address;
+    use HTML::FormatText;
 
 =head1 RT::FilterRule::Condition METHODS
 
@@ -2864,6 +3148,7 @@ other parameters are passed to B<Set> below.
             'From'          => 0,
             'To'            => 0,
             'Ticket'        => undef,
+            'Cache'         => {},
         };
 
         bless( $self, $class );
@@ -2894,7 +3179,7 @@ The custom field ID associated with this condition, if applicable
 =item B<Values>
 
 Array reference containing the list of values to match against, any one of
-which will mean the condition has matched
+which will mean this condition has matched
 
 =back
 
@@ -2916,27 +3201,44 @@ The value the ticket is changing to (the same as I<From> on ticket creation)
 
 =item B<Ticket>
 
-The ticket ID or C<RT::Ticket> object to match the condition against
+The C<RT::Ticket> object to match the condition against
 
 =back
 
-This method returns nothing.
+Finally, B<Cache> should be set to a hash reference, which should be
+shared across all B<Test> or T<TestSingleValue> calls for this event;
+lookups such as ticket subject, custom field ID to name mappings, and so on,
+will be cached here so that they don't have to be done multiple times.
 
-(TODO)
+This method returns nothing.
 
 =cut
 
     sub Set {
         my ( $self, %args ) = @_;
 
-        # TODO: writeme
+        foreach (
+            'ConditionType', 'CustomField', 'Values', 'TriggerType',
+            'From',          'To',          'Ticket', 'Cache'
+            )
+        {
+            $self->{$_} = $args{$_} if ( exists $args{$_} );
+        }
+
+        return 1;
     }
 
 =head2 Test [PARAMS, Checks => ARRAYREF, IncludeAll => 1]
 
 Test the event described in the parameters against this condition, returning
-true if matched, false otherwise, and appending details of the checks
-performed to the I<Checks> array reference.
+( I<$matched>, I<$message> ), where I<$matched> is true if the condition
+matched and I<$message> describes the match, localised for the current user.
+
+Appends details of the checks performed to the I<Checks> array reference,
+where each addition is an array reference of [ I<$matched>, I<$message>,
+I<$eventvalue>, I<$checkvalue> ]; I<$eventvalue> is the relevant value from
+the event, such as I<To>, and I<$checkvalue> is the value the condition was
+checking it against.
 
 If additional parameters are supplied, they are run through B<Set> above
 before the test is performed.
@@ -2945,35 +3247,89 @@ The I<IncludeAll> parameter, and the contents of the I<Checks> array
 reference, are described in the documentation of the C<RT::FilterRule>
 B<Match> method.
 
-(TODO)
-
 =cut
 
     sub Test {
-        my $self = shift;
+        my $self        = shift;
+        my %args        = ( 'Checks' => [], 'IncludeAll' => 0, @_ );
+        my @CheckValues = ();
 
-        # TODO: writeme
-        return 0;
+        $self->Set(%args);
+
+        my ( $Matched, $Message ) = ( 0, undef );
+        @CheckValues = $self->Values;
+        push @CheckValues, '' if ( scalar @CheckValues == 0 );
+
+        foreach my $CheckValue (@CheckValues) {
+            my ( $ValMatched, $ValMessage, $EventValue )
+                = $self->TestSingleValue( 'CheckValue' => $CheckValue );
+            $Message = $ValMessage if ( not defined $Message );
+            push @{ $args{'Checks'} },
+                [ $ValMatched, $ValMessage, $EventValue, $CheckValue ];
+            if ($ValMatched && not $Matched) {
+                $Matched = $ValMatched;
+                $Message = $ValMessage;
+                last if ( not $args{'IncludeAll'} );
+            }
+        }
+
+        $Message = $self->loc('No match') if ( not defined $Message );
+
+        return ( $Matched, $Message );
     }
 
-=head2 TestSingleValue PARAMS, Check => VALUE
+=head2 TestSingleValue PARAMS, CheckValue => VALUE
 
 Test the event described in the parameters against this condition, returning
-true if matched, false otherwise, where only the specific I<VALUE> is tested
-against the event's I<From>/I<To>/I<Ticket>.
+( I<$matched>, I<$message>, I<$eventvalue> ), where only the specific
+I<VALUE> is tested against the event's I<From>/I<To>/I<Ticket> - the
+specific event value tested against is returned in I<$eventvalue>.
 
 This is called internally by the B<Test> method for each of the value checks
 in the condition.
-
-(TODO)
 
 =cut
 
     sub TestSingleValue {
         my $self = shift;
+        my %args = ( 'CheckValue' => '', @_ );
 
-        # TODO: writeme
-        return 0;
+        $self->Set(%args);
+
+        if ( not $self->{'Cache'}->{'ConditionTypes'} ) {
+            $self->{'Cache'}->{'ConditionTypes'} = {
+                map { $_->{'ConditionType'}, $_ }
+                    RT::Extension::FilterRules->ConditionTypes(
+                    $self->CurrentUser
+                    )
+            };
+        }
+
+        # TODO: check condition TriggerTypes against TriggerType
+
+        my ( $Matched, $Message, $EventValue ) = ( 0, '', '' );
+
+        my $Method = '_' . $self->ConditionType;
+        if ( $self->can($Method) ) {
+            ( $Matched, $Message, $EventValue )
+                = $self->$Method( 'CheckValue' => $args{'CheckValue'} );
+        } elsif (
+            defined $self->{'Cache'}->{'ConditionTypes'}
+            ->{ $self->ConditionType }->{'Function'} )
+        {
+            ( $Matched, $Message, $EventValue )
+                = $self->{'Cache'}->{'ConditionTypes'}
+                ->{ $self->ConditionType }->{'Function'}
+                ->( $self->CurrentUser, %$self );
+        } else {
+            $Message = $self->loc( 'Undefined condition type: [_1]',
+                $self->ConditionType );
+            RT->Logger->error(
+                "RT::Extension::FilterRules - undefined condition type: "
+                    . $self->ConditionType );
+        }
+
+        return ( $Matched, $Message, $EventValue );
     }
 
 =head2 Properties
@@ -2991,6 +3347,654 @@ serialising and storing.
             'Values'        => $self->{'Values'}
         };
     }
+
+=head2 ConditionType
+
+Return the condition type.
+
+=cut
+
+    sub ConditionType { return $_[0]->{'ConditionType'}; }
+
+=head2 CustomField
+
+Return the custom field ID associated with this condition.
+
+=cut
+
+    sub CustomField { return $_[0]->{'CustomField'}; }
+
+=head2 Values
+
+Return the value array associated with this condition.
+
+=cut
+
+    sub Values { return @{ $_[0]->{'Values'} || [] }; }
+
+=head2 TriggerType
+
+Return the trigger type of the event being tested against this condition.
+
+=cut
+
+    sub TriggerType { return $_[0]->{'TriggerType'}; }
+
+=head2 From
+
+Return the moving-from value of the event being tested against this
+condition.
+
+=cut
+
+    sub From { return $_[0]->{'From'}; }
+
+=head2 To
+
+Return the moving-to value of the event being tested against this condition.
+
+=cut
+
+    sub To { return $_[0]->{'To'}; }
+
+=head2 TicketQueue
+
+Return the ticket queue ID associated with the event being tested, caching
+it locally.
+
+=cut
+
+    sub TicketQueue {
+        my $self = shift;
+        return '' if ( not $self->{'Ticket'} );
+        $self->{'Cache'}->{'TicketQueue'} = $self->{'Ticket'}->Queue
+            if ( not exists $self->{'Cache'}->{'TicketQueue'} );
+        return $self->{'Cache'}->{'TicketQueue'};
+    }
+
+=head2 TicketSubject
+
+Return the ticket subject associated with the event being tested, caching it
+locally.
+
+=cut
+
+    sub TicketSubject {
+        my $self = shift;
+        return '' if ( not $self->{'Ticket'} );
+        $self->{'Cache'}->{'TicketSubject'} = $self->{'Ticket'}->Subject
+            if ( not exists $self->{'Cache'}->{'TicketSubject'} );
+        return $self->{'Cache'}->{'TicketSubject'};
+    }
+
+=head2 TicketPriority
+
+Return the priority of the ticket associated with the event being tested,
+caching it locally.
+
+=cut
+
+    sub TicketPriority {
+        my $self = shift;
+        return 0 if ( not $self->{'Ticket'} );
+        $self->{'Cache'}->{'TicketPriority'} = $self->{'Ticket'}->Priority
+            if ( not exists $self->{'Cache'}->{'TicketPriority'} );
+        return $self->{'Cache'}->{'TicketPriority'};
+    }
+
+=head2 TicketStatus
+
+Return the status of the ticket associated with the event being tested,
+caching it locally.
+
+=cut
+
+    sub TicketStatus {
+        my $self = shift;
+        return 0 if ( not $self->{'Ticket'} );
+        $self->{'Cache'}->{'TicketStatus'} = $self->{'Ticket'}->Status
+            if ( not exists $self->{'Cache'}->{'TicketStatus'} );
+        return $self->{'Cache'}->{'TicketStatus'};
+    }
+
+=head2 TicketCustomFieldValue CUSTOMFIELDID
+
+Return the value of the custom field with the given ID attached to the
+ticket associated with the event being tested, caching it locally.
+
+=cut
+
+    sub TicketCustomFieldValue {
+        my ( $self, $CustomFieldId ) = @_;
+
+        return '' if ( not $self->{'Ticket'} );
+        my $CacheKey = 'TicketCustomFieldValue-' . $CustomFieldId;
+
+        if ( not exists $self->{'Cache'}->{$CacheKey} ) {
+            $self->{'Cache'}->{$CacheKey}
+                = $self->{'Ticket'}->FirstCustomFieldValue($CustomFieldId);
+            $self->{'Cache'}->{$CacheKey} = ''
+                if ( not defined $self->{'Cache'}->{$CacheKey} );
+        }
+
+        return $self->{'Cache'}->{$CacheKey};
+    }
+
+=head2 TicketRequestorEmailAddresses
+
+Return an array of the requestor email addresses of the event's ticket,
+caching it locally.
+
+=cut
+
+    sub TicketRequestorEmailAddresses {
+        my $self = shift;
+        return () if ( not $self->{'Ticket'} );
+        $self->{'Cache'}->{'TicketRequestorEmailAddresses'}
+            = [ $self->{'Ticket'}->Requestors->MemberEmailAddresses ]
+            if (
+            not exists $self->{'Cache'}->{'TicketRequestorEmailAddresses'} );
+        return @{ $self->{'Cache'}->{'TicketRequestorEmailAddresses'} };
+    }
+
+=head2 TicketRecipientEmailAddresses
+
+Return an array of the recipient email addresses of the event's ticket,
+caching it locally.
+
+=cut
+
+    sub TicketRecipientEmailAddresses {
+        my $self = shift;
+
+        return () if ( not $self->{'Ticket'} );
+
+        if ( not exists $self->{'Cache'}->{'TicketRecipientEmailAddresses'} )
+        {
+            my ($Transactions, $FirstTransaction, $Attachments,
+                $FirstMessage, $Addresses
+               ) = ( undef, undef, undef, undef, undef );
+
+            $Transactions = $self->{'Ticket'}->Transactions;
+            $FirstTransaction = $Transactions->Next if ($Transactions);
+            $Attachments = $FirstTransaction->Message if ($FirstTransaction);
+            $FirstMessage = $Attachments->Next if ($Attachments);
+
+            # NB we cannot use $FirstMessage->Addresses because it comes up
+            # empty in RT 4.2.16.
+            #
+
+            $Addresses = {};
+            if ($FirstMessage) {
+                foreach ( grep {/^(From|To|Cc):/i}
+                    $FirstMessage->SplitHeaders )
+                {
+                    next if ( !s/^(From|To|Cc):// );
+                    $Addresses->{ ucfirst( lc($1) ) }
+                        = [ Email::Address->parse($_) ];
+                }
+            }
+
+            $Addresses = {} if ( not defined $Addresses );
+            $self->{'Cache'}->{''} = [];
+            foreach ( 'To', 'Cc' ) {
+                foreach ( @{ $Addresses->{$_} || [] } ) {
+                    push @{ $self->{'Cache'}
+                            ->{'TicketRecipientEmailAddresses'} }, $_->address
+                        if ( defined $_ );
+                }
+            }
+        }
+
+        return @{ $self->{'Cache'}->{'TicketRecipientEmailAddresses'} };
+    }
+
+=head2 TicketFirstCommentText
+
+Return the first comment of the event's tickets, in text, caching it
+locally.  If the first comment is in HTML, it is converted to plain text.
+
+=cut
+
+    sub TicketFirstCommentText {
+        my $self = shift;
+
+        return '' if ( not $self->{'Ticket'} );
+
+        if ( not exists $self->{'Cache'}->{'TicketFirstCommentText'} ) {
+
+            $self->{'Cache'}->{'TicketFirstCommentText'} = '';
+
+            my $Transactions     = $self->{'Ticket'}->Transactions;
+            my $FirstTransaction = undef;
+
+            if ($Transactions) {
+                $Transactions->OrderByCols(
+                    { 'FIELD' => 'Created', 'ORDER' => 'ASC' },
+                    { 'FIELD' => 'id',      'ORDER' => 'ASC' }
+                );
+                $Transactions->RowsPerPage(1);
+                $FirstTransaction = $Transactions->Next;
+            }
+
+            if ( defined $FirstTransaction ) {
+                my $FirstComment
+                    = $FirstTransaction->Content( 'Type' => 'text/html' )
+                    || '';
+                $FirstComment =~ s/^<pre>//is;
+                $FirstComment
+                    = HTML::FormatText->format_string($FirstComment);
+
+                if ( $FirstComment !~ /\S/ ) {
+                    $FirstComment
+                        = $FirstTransaction->Content( 'Type' => 'text/plain' )
+                        || '';
+                }
+
+                $self->{'Cache'}->{'TicketFirstCommentText'} = $FirstComment;
+            }
+        }
+
+        return $self->{'Cache'}->{'TicketFirstCommentText'};
+    }
+
+=head2 _All
+
+Return the results of an "All" condition check.
+
+=cut
+
+    sub _All {
+        my ( $self, %args ) = @_;
+        return ( 1, $self->loc('Condition always matches'), '' );
+    }
+
+=head2 _InQueue
+
+Return the results of an "InQueue" condition check.
+
+=cut
+
+    sub _InQueue {
+        my ( $self, %args ) = @_;
+        my $EventValue = $self->TicketQueue || 'UNKNOWN';
+        if ( $EventValue eq $args{'CheckValue'} ) {
+            return ( 1, $self->loc('Queue matches'), $EventValue );
+        }
+        return (
+            0,
+            $self->loc(
+                'Ticket queue [_1] is not [_2]', $EventValue,
+                $args{'CheckValue'}
+            ),
+            $EventValue
+        );
+    }
+
+=head2 _FromQueue
+
+Return the results of a "FromQueue" condition check.
+
+=cut
+
+    sub _FromQueue {
+        my ( $self, %args ) = @_;
+        my $EventValue = $self->From || 'UNKNOWN';
+        if ( $EventValue eq $args{'CheckValue'} ) {
+            return ( 1, $self->loc('Original queue matches'), $EventValue );
+        }
+        return (
+            0,
+            $self->loc(
+                'Original queue [_1] is not [_2]', $EventValue,
+                $args{'CheckValue'}
+            ),
+            $EventValue
+        );
+    }
+
+=head2 _ToQueue
+
+Return the results of a "ToQueue" condition check.
+
+=cut
+
+    sub _ToQueue {
+        my ( $self, %args ) = @_;
+        my $EventValue = $self->To || 'UNKNOWN';
+        $EventValue = 'UNKNOWN' if ( not defined $EventValue );
+        if ( $EventValue eq $args{'CheckValue'} ) {
+            return ( 1, $self->loc('Destination queue matches'),
+                $EventValue );
+        }
+        return (
+            0,
+            $self->loc(
+                'Destination queue [_1] is not [_2]', $EventValue,
+                $args{'CheckValue'}
+            ),
+            $EventValue
+        );
+    }
+
+=head2 _RequestorEmailIs
+
+Return the results of a "RequestorEmailIs" condition check.
+
+=cut
+
+    sub _RequestorEmailIs {
+        my ( $self, %args ) = @_;
+        my @EventValues = $self->TicketRequestorEmailAddresses;
+
+        push @EventValues, $self->loc('(no value)')
+            if ( scalar @EventValues == 0 );
+
+        foreach my $EventValue (@EventValues) {
+            return ( 1, $self->loc('Requestor email address matches'),
+                $EventValue )
+                if ( lc($EventValue) eq lc( $args{'CheckValue'} ) );
+        }
+
+        return ( 0, $self->loc('Requestor email address does not match'),
+            $EventValues[0] );
+    }
+
+=head2 _RequestorEmailDomainIs
+
+Return the results of a "RequestorEmailDomainIs" condition check.
+
+=cut
+
+    sub _RequestorEmailDomainIs {
+        my ( $self, %args ) = @_;
+        my @EventValues
+            = map { s/^.*\@//; $_ } $self->TicketRequestorEmailAddresses;
+
+        push @EventValues, $self->loc('(no value)')
+            if ( scalar @EventValues == 0 );
+
+        foreach my $EventValue (@EventValues) {
+            return ( 1, $self->loc('Requestor email domain matches'),
+                $EventValue )
+                if ( lc($EventValue) eq lc( $args{'CheckValue'} ) );
+        }
+
+        return ( 0, $self->loc('Requestor email domain does not match'),
+            $EventValues[0] );
+    }
+
+=head2 _RecipientEmailIs
+
+Return the results of a "RecipientEmailIs" condition check.
+
+=cut
+
+    sub _RecipientEmailIs {
+        my ( $self, %args ) = @_;
+        my @EventValues = $self->TicketRecipientEmailAddresses;
+
+        push @EventValues, $self->loc('(no value)')
+            if ( scalar @EventValues == 0 );
+
+        foreach my $EventValue (@EventValues) {
+            return ( 1, $self->loc('Recipient email address matches'),
+                $EventValue )
+                if ( lc($EventValue) eq lc( $args{'CheckValue'} ) );
+        }
+
+        return ( 0, $self->loc('Recipient email address does not match'),
+            $EventValues[0] );
+    }
+
+=head2 _SubjectContains
+
+Return the results of a "SubjectContains" condition check.
+
+=cut
+
+    sub _SubjectContains {
+        my ( $self, %args ) = @_;
+
+        my $EventValue = $self->TicketSubject;
+        $EventValue = '' if ( not defined $EventValue );
+
+        if ( index( lc($EventValue), lc( $args{'CheckValue'} ) ) >= 0 ) {
+            return ( 1, $self->loc('Subject matches'), $EventValue );
+        }
+
+        return ( 0, $self->loc('Subject does not match'), $EventValue );
+    }
+
+=head2 _SubjectOrBodyContains
+
+Return the results of a "SubjectOrBodyContains" condition check.
+
+=cut
+
+    sub _SubjectOrBodyContains {
+        my ( $self, %args ) = @_;
+
+        my $EventValue = $self->TicketSubject;
+        $EventValue = '' if ( not defined $EventValue );
+
+        if ( index( lc($EventValue), lc( $args{'CheckValue'} ) ) >= 0 ) {
+            return ( 1, $self->loc('Subject matches'), $EventValue );
+        }
+
+        my $CheckedSubject = $EventValue;
+        $EventValue = $self->TicketFirstCommentText;
+        $EventValue = '' if ( not defined $EventValue );
+
+        if ( index( lc($EventValue), lc( $args{'CheckValue'} ) ) >= 0 ) {
+            return ( 1, $self->loc('Message body matches'), $EventValue );
+        }
+
+        return (
+            0,
+            $self->loc('Neither subject not message body match'),
+            $CheckedSubject . "\n" . $EventValue
+        );
+    }
+
+=head2 _BodyContains
+
+Return the results of a "BodyContains" condition check.
+
+=cut
+
+    sub _BodyContains {
+        my ( $self, %args ) = @_;
+
+        my $EventValue = $self->TicketFirstCommentText;
+        $EventValue = '' if ( not defined $EventValue );
+
+        if ( index( lc($EventValue), lc( $args{'CheckValue'} ) ) >= 0 ) {
+            return ( 1, $self->loc('Message body matches'), $EventValue );
+        }
+
+        return ( 0, $self->loc('Message body does not match'), $EventValue );
+    }
+
+=head2 _HasAttachment
+
+Return the results of a "HasAttachment" condition check.
+
+=cut
+
+    sub _HasAttachment {
+        my ( $self, %args ) = @_;
+
+        return ( 0, $self->loc('Ticket has no attachment'), 0 )
+            if ( not $self->{'Ticket'} );
+
+        if ( not exists $self->{'Cache'}->{'TicketHasAttachment'} ) {
+            my $AttachmentFound = 0;
+            my $Attachments     = $self->{'Ticket'}->Attachments;
+            while ( my $Attachment = $Attachments->Next() ) {
+                next if ( not $Attachment->Filename );
+                next if ( length $Attachment->Filename < 1 );
+                $AttachmentFound = 1;
+                last;
+            }
+            $self->{'Cache'}->{'TicketHasAttachment'} = $AttachmentFound;
+        }
+
+        if ( $self->{'Cache'}->{'TicketHasAttachment'} ) {
+            return ( 1, $self->loc('Ticket has an attachment'), 1 );
+        }
+
+        return ( 0, $self->loc('Ticket has no attachment'), 0 );
+    }
+
+=head2 _PriorityIs
+
+Return the results of a "PriorityIs" condition check.
+
+=cut
+
+    sub _PriorityIs {
+        my ( $self, %args ) = @_;
+        my $EventValue = $self->TicketPriority;
+        return ( 1, $self->loc('Priority matches'), $EventValue )
+            if ( $args{'CheckValue'} eq $EventValue );
+        return ( 0, $self->loc('Priority does not match'), $EventValue );
+    }
+
+=head2 _PriorityUnder
+
+Return the results of a "PriorityUnder" condition check.
+
+=cut
+
+    sub _PriorityUnder {
+        my ( $self, %args ) = @_;
+        my $EventValue = $self->TicketPriority;
+
+        return ( 0, $self->loc('Priority is not numeric'), $EventValue )
+            if ( $EventValue !~ /^\d+$/ );
+        return ( 0, $self->loc('Priority to test against is not numeric'),
+            $EventValue )
+            if ( $args{'CheckValue'} !~ /^\d+$/ );
+
+        return ( 1,
+            $self->loc( 'Priority is under [_1]', $args{'CheckValue'} ),
+            $EventValue )
+            if ( $EventValue < $args{'CheckValue'} );
+
+        return ( 0,
+            $self->loc( 'Priority is not under [_1]', $args{'CheckValue'} ),
+            $EventValue );
+    }
+
+=head2 _PriorityOver
+
+Return the results of a "PriorityOver" condition check.
+
+=cut
+
+    sub _PriorityOver {
+        my ( $self, %args ) = @_;
+        my $EventValue = $self->TicketPriority;
+
+        return ( 0, $self->loc('Priority is not numeric'), $EventValue )
+            if ( $EventValue !~ /^\d+$/ );
+        return ( 0, $self->loc('Priority to test against is not numeric'),
+            $EventValue )
+            if ( $args{'CheckValue'} !~ /^\d+$/ );
+
+        return ( 1,
+            $self->loc( 'Priority is over [_1]', $args{'CheckValue'} ),
+            $EventValue )
+            if ( $EventValue > $args{'CheckValue'} );
+
+        return ( 0,
+            $self->loc( 'Priority is not over [_1]', $args{'CheckValue'} ),
+            $EventValue );
+    }
+
+=head2 _CustomFieldIs
+
+Return the results of a "CustomFieldIs" condition check.
+
+=cut
+
+    sub _CustomFieldIs {
+        my ( $self, %args ) = @_;
+
+        my $EventValue
+            = $self->TicketCustomFieldValue( $args{'CustomField'} );
+        $EventValue = '' if ( not defined $EventValue );
+
+        if ( lc($EventValue) eq lc( $args{'CheckValue'} ) ) {
+            return (
+                1,
+                $self->loc(
+                    'Custom field [_1] matches exactly',
+                    $args{'CustomField'}
+                ),
+                $EventValue
+            );
+        }
+
+        return (
+            0,
+            $self->loc(
+                'Custom field [_1] does not match exactly',
+                $args{'CustomField'}
+            ),
+            $EventValue
+        );
+    }
+
+=head2 _CustomFieldContains
+
+Return the results of a "CustomFieldContains" condition check.
+
+=cut
+
+    sub _CustomFieldContains {
+        my ( $self, %args ) = @_;
+
+        my $EventValue
+            = $self->TicketCustomFieldValue( $args{'CustomField'} );
+        $EventValue = '' if ( not defined $EventValue );
+
+        if ( index( lc($EventValue), lc( $args{'CheckValue'} ) ) >= 0 ) {
+            return (
+                1,
+                $self->loc(
+                    'Custom field [_1] matches',
+                    $args{'CustomField'}
+                ),
+                $EventValue
+            );
+        }
+
+        return (
+            0,
+            $self->loc(
+                'Custom field [_1] does not match',
+                $args{'CustomField'}
+            ),
+            $EventValue
+        );
+    }
+
+=head2 _StatusIs
+
+Return the results of a "StatusIs" condition check.
+
+=cut
+
+    sub _StatusIs {
+        my ( $self, %args ) = @_;
+        my $EventValue = $self->TicketStatus;
+        return ( 1, $self->loc('Status matches'), $EventValue )
+            if ( lc( $args{'CheckValue'} ) eq lc($EventValue) );
+        return ( 0, $self->loc('Status does not match'), $EventValue );
+    }
+
 }
 
 {
@@ -3034,6 +4038,7 @@ other parameters are passed to B<Set> below.
             'Value'       => '',
             'Notify'      => '',
             'Ticket'      => undef,
+            'Cache'       => {},
         };
 
         bless( $self, $class );
@@ -3080,20 +4085,31 @@ The following parameters define the ticket being acted upon:
 
 =item B<Ticket>
 
-The ticket ID or C<RT::Ticket> object to match the condition against
+The C<RT::Ticket> object to perform the action on
 
 =back
 
-This method returns nothing.
+Finally, B<Cache> should be set to a hash reference, which should be
+shared across all B<Test> or T<TestSingleValue> calls for this event;
+lookups such as ticket subject, custom field ID to name mappings, and so on,
+will be cached here so that they don't have to be done multiple times.
 
-(TODO)
+This method returns nothing.
 
 =cut
 
     sub Set {
         my ( $self, %args ) = @_;
 
-        # TODO: writeme
+        foreach (
+            'ActionType', 'CustomField', 'Value',
+            'Notify',     'Ticket',      'Cache'
+            )
+        {
+            $self->{$_} = $args{$_} if ( exists $args{$_} );
+        }
+
+        return 1;
     }
 
 =head2 Perform
@@ -3101,15 +4117,43 @@ This method returns nothing.
 Perform the action described by this object's parameters, returning
 ( I<$ok>, I<$message> ).
 
-(TODO)
-
 =cut
 
     sub Perform {
-        my $self = shift;
+        my ( $self, %args ) = @_;
 
-        # TODO: writeme
-        return 0;
+        $self->Set(%args);
+
+        if ( not $self->{'Cache'}->{'ActionTypes'} ) {
+            $self->{'Cache'}->{'ActionTypes'} = {
+                map { $_->{'ActionType'}, $_ }
+                    RT::Extension::FilterRules->ActionTypes(
+                    $self->CurrentUser
+                    )
+            };
+        }
+
+        my ( $Status, $Message ) = ( 0, '' );
+
+        my $Method = '_' . $self->ActionType;
+        if ( $self->can($Method) ) {
+            ( $Status, $Message ) = $self->$Method();
+        } elsif (
+            defined $self->{'Cache'}->{'ActionTypes'}->{ $self->ActionType }
+            ->{'Function'} )
+        {
+            ( $Status, $Message )
+                = $self->{'Cache'}->{'ActionTypes'}->{ $self->ActionType }
+                ->{'Function'}->( $self->CurrentUser, %$self );
+        } else {
+            $Message = $self->loc( 'Undefined action type: [_1]',
+                $self->ActionType );
+            RT->Logger->error(
+                "RT::Extension::FilterRules - undefined action type: "
+                    . $self->ActionType );
+        }
+
+        return ( $Status, $Message );
     }
 
 =head2 IsNotification
@@ -3118,15 +4162,11 @@ Return true if this action is of a type which sends a notification, false
 otherwise.  This is used when carrying out actions to ensure that all other
 ticket actions are performed first.
 
-(TODO)
-
 =cut
 
     sub IsNotification {
         my $self = shift;
-
-        # TODO: writeme
-        return 0;
+        return $self->ActionType =~ /^Notify/ ? 1 : 0;
     }
 
 =head2 Properties
@@ -3145,6 +4185,387 @@ serialising and storing.
             'Notify'      => $self->{'Notify'}
         };
     }
+
+=head2 ActionType
+
+Return the action type.
+
+=cut
+
+    sub ActionType { return $_[0]->{'ActionType'}; }
+
+=head2 CustomField
+
+Return the custom field ID associated with this action.
+
+=cut
+
+    sub CustomField { return $_[0]->{'CustomField'}; }
+
+=head2 Value
+
+Return the value associated with this action.
+
+=cut
+
+    sub Value { return $_[0]->{'Value'}; }
+
+=head2 Notify
+
+Return the notification email address or group ID associated with this
+action.
+
+=cut
+
+    sub Notify { return $_[0]->{'Notify'}; }
+
+=head2 _None
+
+Return ( I<$ok>, I<$message> ) after performing the "None" action.
+
+=cut
+
+    sub _None {
+        my $self = shift;
+        return ( 1, $self->loc('No action taken') );
+    }
+
+=head2 _SubjectPrefix
+
+Return ( I<$ok>, I<$message> ) after performing the "SubjectPrefix" action.
+
+(TODO)
+
+=cut
+
+    sub _SubjectPrefix {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: SubjectPrefix)
+        return 0;
+    }
+
+=head2 _SubjectSuffix
+
+Return ( I<$ok>, I<$message> ) after performing the "SubjectSuffix" action.
+
+(TODO)
+
+=cut
+
+    sub _SubjectSuffix {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: SubjectSuffix)
+        return 0;
+    }
+
+=head2 _SubjectRemoveMatch
+
+Return ( I<$ok>, I<$message> ) after performing the "SubjectRemoveMatch" action.
+
+(TODO)
+
+=cut
+
+    sub _SubjectRemoveMatch {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: SubjectRemoveMatch)
+        return 0;
+    }
+
+=head2 _SubjectSet
+
+Return ( I<$ok>, I<$message> ) after performing the "SubjectSet" action.
+
+(TODO)
+
+=cut
+
+    sub _SubjectSet {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: SubjectSet)
+        return 0;
+    }
+
+=head2 _PrioritySet
+
+Return ( I<$ok>, I<$message> ) after performing the "PrioritySet" action.
+
+(TODO)
+
+=cut
+
+    sub _PrioritySet {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: PrioritySet)
+        return 0;
+    }
+
+=head2 _PriorityAdd
+
+Return ( I<$ok>, I<$message> ) after performing the "PriorityAdd" action.
+
+(TODO)
+
+=cut
+
+    sub _PriorityAdd {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: PriorityAdd)
+        return 0;
+    }
+
+=head2 _PrioritySubtract
+
+Return ( I<$ok>, I<$message> ) after performing the "PrioritySubtract" action.
+
+(TODO)
+
+=cut
+
+    sub _PrioritySubtract {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: PrioritySubtract)
+        return 0;
+    }
+
+=head2 _StatusSet
+
+Return ( I<$ok>, I<$message> ) after performing the "StatusSet" action.
+
+(TODO)
+
+=cut
+
+    sub _StatusSet {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: StatusSet)
+        return 0;
+    }
+
+=head2 _QueueSet
+
+Return ( I<$ok>, I<$message> ) after performing the "QueueSet" action.
+
+(TODO)
+
+=cut
+
+    sub _QueueSet {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: QueueSet)
+        return 0;
+    }
+
+=head2 _CustomFieldSet
+
+Return ( I<$ok>, I<$message> ) after performing the "CustomFieldSet" action.
+
+(TODO)
+
+=cut
+
+    sub _CustomFieldSet {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: CustomFieldSet)
+        return 0;
+    }
+
+=head2 _RequestorAdd
+
+Return ( I<$ok>, I<$message> ) after performing the "RequestorAdd" action.
+
+(TODO)
+
+=cut
+
+    sub _RequestorAdd {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: RequestorAdd)
+        return 0;
+    }
+
+=head2 _RequestorRemove
+
+Return ( I<$ok>, I<$message> ) after performing the "RequestorRemove" action.
+
+(TODO)
+
+=cut
+
+    sub _RequestorRemove {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: RequestorRemove)
+        return 0;
+    }
+
+=head2 _CcAdd
+
+Return ( I<$ok>, I<$message> ) after performing the "CcAdd" action.
+
+(TODO)
+
+=cut
+
+    sub _CcAdd {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: CcAdd)
+        return 0;
+    }
+
+=head2 _CcAddGroup
+
+Return ( I<$ok>, I<$message> ) after performing the "CcAddGroup" action.
+
+(TODO)
+
+=cut
+
+    sub _CcAddGroup {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: CcAddGroup)
+        return 0;
+    }
+
+=head2 _CcRemove
+
+Return ( I<$ok>, I<$message> ) after performing the "CcRemove" action.
+
+(TODO)
+
+=cut
+
+    sub _CcRemove {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: CcRemove)
+        return 0;
+    }
+
+=head2 _AdminCcAdd
+
+Return ( I<$ok>, I<$message> ) after performing the "AdminCcAdd" action.
+
+(TODO)
+
+=cut
+
+    sub _AdminCcAdd {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: AdminCcAdd)
+        return 0;
+    }
+
+=head2 _AdminCcAddGroup
+
+Return ( I<$ok>, I<$message> ) after performing the "AdminCcAddGroup" action.
+
+(TODO)
+
+=cut
+
+    sub _AdminCcAddGroup {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: AdminCcAddGroup)
+        return 0;
+    }
+
+=head2 _AdminCcRemove
+
+Return ( I<$ok>, I<$message> ) after performing the "AdminCcRemove" action.
+
+(TODO)
+
+=cut
+
+    sub _AdminCcRemove {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: AdminCcRemove)
+        return 0;
+    }
+
+=head2 _Reply
+
+Return ( I<$ok>, I<$message> ) after performing the "Reply" action.
+
+(TODO)
+
+=cut
+
+    sub _Reply {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: Reply)
+        return 0;
+    }
+
+=head2 _NotifyEmail
+
+Return ( I<$ok>, I<$message> ) after performing the "NotifyEmail" action.
+
+(TODO)
+
+=cut
+
+    sub _NotifyEmail {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: NotifyEmail)
+        return 0;
+    }
+
+=head2 _NotifyGroup
+
+Return ( I<$ok>, I<$message> ) after performing the "NotifyGroup" action.
+
+(TODO)
+
+=cut
+
+    sub _NotifyGroup {
+        my $self = shift;
+        my %args = @_;
+
+        # TODO: writeme (action: NotifyGroup)
+        return 0;
+    }
+
 }
 
 {

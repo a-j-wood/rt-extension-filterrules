@@ -3,7 +3,7 @@ Display the given list of filter rules, possibly allowing them to be edited
 and moved.
 
   FilterRuleGroup - RT::FilterRuleGroup object containing the rules
-  Edit - which type of rules to list - "GroupConditions" or "FilterRules"
+  Edit - which type of rules to list - "GroupRequirements" or "FilterRules"
   PageLink - URL of page this element is on, for links
 
 Assumes that $PageLink needs to be passed an "id" parameter of
@@ -13,7 +13,7 @@ or edit a filter rule.
 \
 <%ARGS>
 $FilterRuleGroup => undef
-$Edit            => 'GroupConditions'
+$Edit            => 'GroupRequirements'
 $PageLink        => undef
 </%ARGS>
 \
@@ -28,8 +28,8 @@ $CanSee = $CanModify = 1
     ->HasRight( Right => 'SuperUser', Object => RT->System ) );
 
 my $Collection
-    = $Edit eq 'GroupConditions'
-    ? $FilterRuleGroup->GroupConditions
+    = $Edit eq 'GroupRequirements'
+    ? $FilterRuleGroup->GroupRequirements
     : $FilterRuleGroup->FilterRules;
 
 my $Format
@@ -52,8 +52,8 @@ $Format .= ",'__MoveFilterRule__'" if ($CanModify);
 % if (not ($CanSee || $CanModify)) {
 <& /Elements/ListActions, actions => [ loc('Permission denied') ] &>
 % } elsif (not $Collection->CountAll) {
-%     if ($Edit eq 'GroupConditions') {
-<p><em><&|/l&>No condition rules found.</&></em></p>
+%     if ($Edit eq 'GroupRequirements') {
+<p><em><&|/l&>No requirement rules found.</&></em></p>
 %     } else {
 <p><em><&|/l&>No filter rules found.</&></em></p>
 %     }

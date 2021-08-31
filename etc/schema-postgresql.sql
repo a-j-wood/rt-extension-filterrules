@@ -22,7 +22,7 @@ CREATE SEQUENCE filterrules_id_seq;
 CREATE TABLE FilterRules (
   id BIGINT DEFAULT nextval('filterrules_id_seq'),
   FilterRuleGroup BIGINT NOT NULL DEFAULT 0,
-  IsGroupCondition INTEGER NOT NULL DEFAULT 0,
+  IsGroupRequirement INTEGER NOT NULL DEFAULT 0,
   SortOrder BIGINT NOT NULL DEFAULT 0,
   Name VARCHAR(200) NOT NULL,
   TriggerType VARCHAR(200) NOT NULL,

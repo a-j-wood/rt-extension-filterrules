@@ -3,7 +3,7 @@ Allow a filter rule to be edited.
 
   FilterRuleGroup - RT::FilterRuleGroup object containing the rules
   FilterRule - RT::FilterRule object for this rule, undef if creating new
-  Edit - which type of rule to edit - "GroupConditions" or "FilterRules"
+  Edit - which type of rule to edit - "GroupRequirements" or "FilterRules"
   PageLink - URL of page this element is on, to post the form to
   Create - if true, show the form to create a new rule
   SetEnabled - if true, the "Enabled" checkbox is on the page
@@ -16,7 +16,7 @@ or edit a filter rule.
 <%ARGS>
 $FilterRuleGroup => undef
 $FilterRule      => undef
-$Edit            => 'GroupConditions'
+$Edit            => 'GroupRequirements'
 $PageLink        => undef
 $Create          => undef
 $SetEnabled      => undef
@@ -61,43 +61,146 @@ if ( ( not $Create ) && $FilterRule && $FilterRule->id ) {
 <input type="hidden" name="ModifyRule" value="1" />
 <table>
 <tr>\
-<td style="text-align:right;"><&|/l&>Name</&>:</td>\
-<td><input name="Name" value="<% $Create ? '' : $FilterRule->Name || $ARGS{'Name'} %>" /></td>\
-</tr>
-<tr>\
-<td style="text-align:right;"><input type="checkbox" class="checkbox" id="Enabled" name="Enabled" value="1" <%$EnabledChecked|n%> /></td>\
-<td><label for="Enabled"><&|/l&>Enabled (Unchecking this box disables this filter rule)</&></label><br />\
-<input type="hidden" class="hidden" name="SetEnabled" value="1" />\
+<th style="text-align:right;"><&|/l&>Name</&>:</th>\
+<td>\
+% if ($CanModify || $CanCreate) {
+<input name="Name" required value="<% $Create ? '' : $FilterRule->Name || $ARGS{'Name'} %>" />\
+% } else {
+<% $FilterRule->Name %>\
+% }
 </td>\
 </tr>
 <tr>\
-<td style="text-align:right;"><&|/l&>Trigger type</&>:</td>\
+% if ($CanModify || $CanCreate) {
+<td style="text-align:right;"><input type="checkbox" class="checkbox" id="Enabled" name="Enabled" value="1" <%$EnabledChecked|n%> /></td>\
+<td><label for="Enabled">\
+%     if ($Edit eq 'GroupRequirements') {
+<&|/l&>Enabled (Unchecking this box disables this requirement rule)</&>\
+%     } else {
+<&|/l&>Enabled (Unchecking this box disables this filter rule)</&>\
+%     }
+</label><br />\
+<input type="hidden" class="hidden" name="SetEnabled" value="1" />\
+</td>\
+% } else {
+<th style="text-align:right;"><&|/l&>Status</&>:</th><td><% $FilterRule->Disabled ? loc('Disabled') : loc('Enabled') %></td>\
+% }
+</tr>
+<tr>\
+<th style="text-align:right;"><&|/l&>Trigger type</&>:</th>\
+<td>\
 % my $TriggerTypeValue = $Create ? '' : $FilterRule->TriggerType || $ARGS{'TriggerType'};
-<td><select id="TriggerType" name="TriggerType">\
+% if ($CanModify || $CanCreate) {
+<select id="TriggerType" name="TriggerType">\
 <option value="Create"<% $TriggerTypeValue eq 'Create'?' selected':'' %>><&|/l&>On ticket creation</&></option>\
 <option value="QueueMove"<% $TriggerTypeValue eq 'QueueMove'?' selected':'' %>><&|/l&>When a ticket moves between queues</&></option>\
-</select></td>\
-</tr>
-
-%# TODO: other settings
-
-</table>
-% if ( $Create ) {
-<& /Elements/Submit, Label => loc('Create') &>
+</select>\
+% } elsif ($TriggerTypeValue eq 'Create') {
+<&|/l&>On ticket creation</&>\
+% } elsif ($TriggerTypeValue eq 'QueueMove') {
+<&|/l&>When a ticket moves between queues</&>\
 % } else {
-<& /Elements/Submit, Label => loc('Save Changes') &>
+<% $TriggerTypeValue %>\
 % }
+</td>\
+</tr>
+<tr><td colspan="2"><hr /></td></tr>
+<tr>\
+<th style="text-align:right;vertical-align:top;">\
+<&|/l&>Match conditions</&>:<br />\
+<small><em><&|/l&>Rule must meet all of these</&></em></small>\
+</th>\
+<td style="vertical-align:top;">\
+<span id="Requirements">\
+<% $FilterRule->DescribeRequirements |n%>\
+</span>\
+</td>\
+</tr>
+<tr><td colspan="2"><hr /></td></tr>
+<tr>\
+<th style="text-align:right;vertical-align:top;">\
+<&|/l&>Conflict conditions</&>:<br />\
+<small><em><&|/l&>Rule must not meet any of these</&></em></small>\
+</th>\
+<td style="vertical-align:top;">\
+<span id="Conflicts">\
+<% $FilterRule->DescribeConflicts |n%>\
+</span>\
+</td>\
+</tr>
+% if ($Edit ne 'GroupRequirements') {
+<tr><td colspan="2"><hr /></td></tr>
+<tr>\
+<th style="text-align:right;vertical-align:top;">\
+<&|/l&>Actions</&>:<br />\
+<small><em><&|/l&>Actions to perform when rule matches</&></em></small>\
+</th>\
+<td style="vertical-align:top;">\
+<span id="Actions">\
+<% $FilterRule->DescribeActions |n%>\
+</span>\
+</td>\
+</tr>
+% }
+<tr><td colspan="2"><hr /></td></tr>
+<tr>\
+<th style="text-align:right;"><&|/l&>Stop if matched</&>:</th>\
+<td>\
+% if ($CanModify || $CanCreate) {
+<select name="StopIfMatched">\
+<option value="0"<% ( $Create ? $ARGS{'StopIfMatched'} : $FilterRule->StopIfMatched ) ? '' : ' selected' %>>\
+<&|/l&>No - continue processing remaining rules if this rule matches</&>\
+</option>\
+<option value="1"<% ( $Create ? $ARGS{'StopIfMatched'} : $FilterRule->StopIfMatched ) ? ' selected' : '' %>>\
+<&|/l&>Yes - stop processing remaining rules if this rule matches</&>\
+</option>\
+</select>\
+% } elsif ($FilterRule->StopIfMatched) {
+<&|/l&>Yes - stop processing remaining rules if this rule matches</&>\
+% } else {
+<&|/l&>No - continue processing remaining rules if this rule matches</&>\
+% }
+</td>\
+</tr>
+% if ($CanModify || $CanCreate) {
+<tr>\
+<td colspan="2"><hr />\
+%     if ( $Create ) {
+<& /Elements/Submit, Label => loc('Create') &>
+%     } else {
+<& /Elements/Submit, Label => loc('Save Changes') &>
+%     }
+</td></tr>
+% }
+</table>
 </form>
-
-<p>
-TODO: option to delete
-</p>
-
+\
+% if ($CanCreate || $CanModify) {
+<script type="text/javascript">
+%# TODO: replace #Requirements and #Conflicts with condition editors
+%# TODO: replace #Actions with action editor
+</script>
+% }
+\
+% if ( $CanDelete && not $Create ) {
+<div style="text-align:right;margin-top:4em;">
+<form action="<%$PageLink%>" method="post">
+<input type="hidden" name="id" value="<% $FilterRuleGroup->id %>" />
+<input type="hidden" name="Rule" value="<% $FilterRule->id %>" />
+<div class="error" style="padding:0;display:inline-block;"><div class="error" style="padding:1em;border:solid #400 1px;text-align:left;display:inline-block;">
+<input type="submit" name="Delete" value="<&|/l&>Delete this filter rule</&>" />
+<br />
+<small><input type="checkbox" name="ConfirmDelete" value="1" /> <&|/l&>Check this box to confirm</&></small>
+</div></div>
+</form>
+</div>
+% }
+\
 % if ($FilterRule && $FilterRule->id) {
 <& /Elements/ShowHistory,
     Object => $FilterRule,
     ShowDisplayModes => 0,
-    DisplayPath => 'History.html',
+    DisplayPath => $PageLink,
 &>
 % }
 
@@ -110,7 +213,7 @@ deleting a rule as appropriate.
 <%ARGS>
 $ARGSRef         => {}
 $FilterRuleGroup => undef
-$Edit            => 'GroupConditions'
+$Edit            => 'GroupRequirements'
 $Results         => []
 </%ARGS>
 \
@@ -134,6 +237,8 @@ my $FilterRule = undef;
 my $LoadRule   = undef;
 if ( $ARGSRef->{'ModifyRule'} && ( $ARGSRef->{'Rule'} ne 'new' ) ) {
     $LoadRule = $ARGSRef->{'Rule'};
+} elsif ( $ARGSRef->{'Delete'} && $ARGSRef->{'Rule'} ) {
+    $LoadRule = $ARGSRef->{'Rule'};
 } elsif ( $ARGSRef->{'MoveUp'} ) {
     $LoadRule = $ARGSRef->{'MoveUp'};
 } elsif ( $ARGSRef->{'MoveDown'} ) {
@@ -152,17 +257,17 @@ if ($LoadRule) {
         return;
     }
 
-    if ( $Edit eq 'GroupConditions' ) {
-        if ( not $FilterRule->IsGroupCondition ) {
+    if ( $Edit eq 'GroupRequirements' ) {
+        if ( not $FilterRule->IsGroupRequirement ) {
             push @$Results,
                 loc(
-                'Filter rule [_1] is not a condition rule of filter rule group [_2]',
+                'Filter rule [_1] is not a requirement rule of filter rule group [_2]',
                 $LoadRule, $FilterRuleGroup->id
                 );
             return;
         }
     } else {
-        if ( $FilterRule->IsGroupCondition ) {
+        if ( $FilterRule->IsGroupRequirement ) {
             push @$Results,
                 loc(
                 'Filter rule [_1] is not a filter rule of filter rule group [_2]',
@@ -173,7 +278,42 @@ if ($LoadRule) {
     }
 }
 
-if ( $ARGSRef->{'ModifyRule'} && ( $ARGSRef->{'Rule'} eq 'new' ) ) {
+if (   $FilterRule
+    && $FilterRule->id
+    && $ARGSRef->{'Delete'}
+    && not $ARGSRef->{'ConfirmDelete'} )
+{
+    push @$Results, loc('Not deleted - confirmation box not checked');
+    return;
+} elsif ( $FilterRule
+    && $FilterRule->id
+    && $ARGSRef->{'Delete'}
+    && $ARGSRef->{'ConfirmDelete'}
+    && not $CanDelete )
+{
+    push @$Results, loc('Permission denied');
+    return;
+} elsif ( $FilterRule
+    && $FilterRule->id
+    && $ARGSRef->{'Delete'}
+    && $ARGSRef->{'ConfirmDelete'} )
+{
+    my ( $ok, $msg ) = $FilterRule->Delete();
+    push @$Results, $msg;
+    if ($ok) {
+        $ARGSRef->{'Create'} = 1;
+        delete $ARGSRef->{'Rule'};
+    }
+    return;
+}
+
+if (   $ARGSRef->{'ModifyRule'}
+    && ( $ARGSRef->{'Rule'} eq 'new' )
+    && not $CanCreate )
+{
+    push @$Results, loc('Permission denied');
+    return;
+} elsif ( $ARGSRef->{'ModifyRule'} && ( $ARGSRef->{'Rule'} eq 'new' ) ) {
 
     # Create a new filter rule.
     #
@@ -197,8 +337,8 @@ if ( $ARGSRef->{'ModifyRule'} && ( $ARGSRef->{'Rule'} eq 'new' ) ) {
 
     my ( $ok, $msg );
 
-    if ( $Edit eq 'GroupConditions' ) {
-        ( $ok, $msg ) = $FilterRuleGroup->AddGroupCondition(%CreateArgs);
+    if ( $Edit eq 'GroupRequirements' ) {
+        ( $ok, $msg ) = $FilterRuleGroup->AddGroupRequirement(%CreateArgs);
     } else {
         ( $ok, $msg ) = $FilterRuleGroup->AddFilterRule(%CreateArgs);
     }

@@ -1,5 +1,5 @@
 <%doc>
-Allow the conditions of a filter rule group to be modified.
+Allow the filter rules of a filter rule group to be modified.
 </%doc>
 \
 <%ARGS>
@@ -16,7 +16,7 @@ unless ( $session{'CurrentUser'}
 my $FilterRuleGroup = RT::FilterRuleGroup->new( $session{'CurrentUser'} );
 $FilterRuleGroup->Load($id) || Abort("Couldn't load filter rule group '$id'");
 
-my $Title = loc( 'Filter rule group #[_1]: [_2]: Condition rules',
+my $Title = loc( 'Filter rule group #[_1]: [_2]: Filter rules',
     $FilterRuleGroup->id, $FilterRuleGroup->Name );
 
 my @Results = ();
@@ -30,7 +30,7 @@ if (   $ARGS{'Rule'}
         '/Elements/FilterRules/EditRule:Post',
         'ARGSRef'         => \%ARGS,
         'FilterRuleGroup' => $FilterRuleGroup,
-        'Edit'            => 'GroupConditions',
+        'Edit'            => 'FilterRules',
         'Results'         => \@Results
     );
 }
@@ -45,13 +45,18 @@ if ( $ARGS{'Rule'} && not $ARGS{'Create'} ) {
             "Filter rule '$ARGS{'Rule'}' is not part of filter rule group '$id'"
         );
     }
+    if ( $FilterRule->IsGroupRequirement ) {
+        Abort(
+            "Filter rule '$ARGS{'Rule'}' is not a filter rule of filter rule group '$id'"
+        );
+    }
     $Title = loc(
-        'Filter rule group #[_1]: [_2]: Condition rule #[_3]: [_4]',
+        'Filter rule group #[_1]: [_2]: Filter rule #[_3]: [_4]',
         $FilterRuleGroup->id, $FilterRuleGroup->Name,
         $FilterRule->id,      $FilterRule->Name
     );
 } elsif ( $ARGS{'Create'} ) {
-    $Title = loc( 'Filter rule group #[_1]: [_2]: Add new condition rule',
+    $Title = loc( 'Filter rule group #[_1]: [_2]: Add new filter rule',
         $FilterRuleGroup->id, $FilterRuleGroup->Name );
 }
 </%INIT>
@@ -65,21 +70,21 @@ if ( $ARGS{'Rule'} && not $ARGS{'Create'} ) {
     %ARGS,
     FilterRuleGroup => $FilterRuleGroup,
     FilterRule => $FilterRule,
-    Edit => 'GroupConditions',
-    PageLink => RT->Config->Get('WebPath') . '/Admin/FilterRules/Conditions.html',
+    Edit => 'FilterRules',
+    PageLink => RT->Config->Get('WebPath') . '/Admin/FilterRules/Filters.html',
 &>
 % } else {
-<form action="Conditions.html" method="post">
+<form action="Filters.html" method="post">
 <input type="hidden" name="id" value="<%$id%>" />
 <input type="hidden" name="Create" value="1" />
 <p>
-<input type="submit" value="<&|/l&>Create new condition rule</&>" />
+<input type="submit" value="<&|/l&>Create new filter rule</&>" />
 </p>
 </form>
 <& /Elements/FilterRules/ShowRules,
     %ARGS,
     FilterRuleGroup => $FilterRuleGroup,
-    Edit => 'GroupConditions',
-    PageLink => RT->Config->Get('WebPath') . '/Admin/FilterRules/Conditions.html',
+    Edit => 'FilterRules',
+    PageLink => RT->Config->Get('WebPath') . '/Admin/FilterRules/Filters.html',
 &>
 % }

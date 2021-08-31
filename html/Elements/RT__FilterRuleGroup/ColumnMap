@@ -70,9 +70,9 @@ my $COLUMN_MAP = {
             return \$Output;
             }
     },
-    'ConditionsCount' => {
-        'title' => 'Conditions',                                        # loc
-        'value' => sub { return $_[0]->GroupConditions->CountAll; }
+    'RequirementsCount' => {
+        'title' => 'Requirements',                                      # loc
+        'value' => sub { return $_[0]->GroupRequirements->CountAll; }
     },
     'FilterRulesCount' => {
         'title' => 'Filter rules',                                      # loc
