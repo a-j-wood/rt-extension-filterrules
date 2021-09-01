@@ -239,6 +239,7 @@ foreach my $QueueCollection (
 </select>
 \
 <select id="CanMatchQueues">
+<option value="">-</option>
 %     my ($Collection, $Item);
 %     $Collection = $FilterRuleGroup->CanMatchQueuesObj;
 %     $Collection->OrderByCols( { 'FIELD' => 'Name', 'ORDER' => 'ASC' } );
@@ -248,6 +249,7 @@ foreach my $QueueCollection (
 </select>
 \
 <select id="CanTransferQueues">
+<option value="">-</option>
 %     $Collection = $FilterRuleGroup->CanTransferQueuesObj;
 %     $Collection->OrderByCols( { 'FIELD' => 'Name', 'ORDER' => 'ASC' } );
 %     while ($Item = $Collection->Next) {
@@ -256,6 +258,7 @@ foreach my $QueueCollection (
 </select>
 \
 <select id="CanUseGroups">
+<option value="">-</option>
 %     $Collection = $FilterRuleGroup->CanUseGroupsObj;
 %     $Collection->OrderByCols( { 'FIELD' => 'Name', 'ORDER' => 'ASC' } );
 %     while ($Item = $Collection->Next) {
@@ -264,12 +267,14 @@ foreach my $QueueCollection (
 </select>
 \
 <select id="CustomFields">
+<option value="">-</option>
 %     foreach (sort keys %VisibleCustomFields) {
 <option value="<% $VisibleCustomFields{$_} %>"><% $_ %></option>
 %     }
 </select>
 \
 <select id="Statuses">
+<option value="">-</option>
 %     foreach (sort keys %StatusValues) {
 <option><% $_ %></option>
 %     }
@@ -278,14 +283,11 @@ foreach my $QueueCollection (
 </span>
 \
 <script type="text/javascript">
-%# TODO: pre-populate the requirements
-%# TODO: pre-populate the conflicts
-%# TODO: pre-populate the actions
 \
 var countFilterRuleFields = 0;
 var countFilterRuleFieldValues = 0;
 \
-function addFilterRuleCondition (setCF, setType, setText, setQueue) {
+function addFilterRuleCondition (setCF, setType, setText, setQueue, setStatus) {
     var newRow = jQuery('<tr></tr>');
     var cellType = jQuery('<td></td>');
     var cellValue = jQuery('<td></td>');
@@ -295,6 +297,7 @@ function addFilterRuleCondition (setCF, setType, setText, setQueue) {
     var typeType = jQuery('<select></select>');
     var valueText = jQuery('<input />');
     var valueQueue = jQuery('<select></select>');
+    var valueStatus = jQuery('<select></select>');
 
     countFilterRuleFields++;
 
@@ -333,17 +336,26 @@ function addFilterRuleCondition (setCF, setType, setText, setQueue) {
     if (setQueue)
         valueQueue.val(setQueue);
 
+    valueStatus.html(jQuery('#Statuses').html());
+    valueStatus.attr('name', conditionSet+'-'+countFilterRuleFields+'-ValueStatus-0');
+    valueStatus.attr('statusvalue', 1);
+    if (setStatus)
+        valueStatus.val(setStatus);
+
     cellType.append(typePrefix);
     cellType.append(typeCF);
     cellType.append(typeType);
+    cellType.css('vertical-align', 'top');
 
     cellValue.attr('valuecell', 1);
     cellValue.append(valueText);
     cellValue.append(valueQueue);
+    cellValue.append(valueStatus);
     cellValue.append('<br />');
     cellValue.append('<button action="AddValue">'+<%loc('Add value')|j%>+'</button>');
 
     cellButton.append('<button action="RemoveCondition">'+<%loc('Remove condition')|j%>+'</button>');
+    cellButton.css('vertical-align', 'top');
 
     newRow.append(cellType);
     newRow.append(cellValue);
@@ -367,15 +379,40 @@ function onFilterRuleConditionTypeChange () {
     if (selectedOption.attr('valuetype') == 'Queue') {
         myRow.find('td[valuecell] button').show();
         myRow.find('input[textvalue]').hide();
+        myRow.find('input[textvalue]').prop('required', false);
         myRow.find('select[queuevalue]').show();
+        myRow.find('select[queuevalue]').prop('required', true);
+        myRow.find('select[statusvalue]').hide();
+        myRow.find('select[statusvalue]').prop('required', false);
+    } else if (selectedOption.attr('valuetype') == 'Status') {
+        myRow.find('td[valuecell] button').show();
+        myRow.find('input[textvalue]').hide();
+        myRow.find('input[textvalue]').prop('required', false);
+        myRow.find('select[queuevalue]').hide();
+        myRow.find('select[queuevalue]').prop('required', false);
+        myRow.find('select[statusvalue]').show();
+        myRow.find('select[statusvalue]').prop('required', true);
     } else if (selectedOption.attr('valuetype') == 'None') {
         myRow.find('td[valuecell] button').hide();
         myRow.find('input[textvalue]').hide();
+        myRow.find('input[textvalue]').prop('required', false);
         myRow.find('select[queuevalue]').hide();
+        myRow.find('select[queuevalue]').prop('required', false);
+        myRow.find('select[statusvalue]').hide();
+        myRow.find('select[statusvalue]').prop('required', false);
     } else {
         myRow.find('td[valuecell] button').show();
+        if (selectedOption.attr('valuetype') == 'Integer') {
+            myRow.find('input[textvalue]').attr('size', 4);
+        } else {
+            myRow.find('input[textvalue]').attr('size', 30);
+        }
         myRow.find('input[textvalue]').show();
+        myRow.find('input[textvalue]').prop('required', true);
         myRow.find('select[queuevalue]').hide();
+        myRow.find('select[queuevalue]').prop('required', false);
+        myRow.find('select[statusvalue]').hide();
+        myRow.find('select[statusvalue]').prop('required', false);
     }
 
     if (/CustomField/.test(selectedOption.attr('value'))) {
@@ -397,10 +434,11 @@ function onFilterRuleConditionButton () {
     return false;
 }
 \
-function filterRuleConditionAddValue (buttonElement, setText, setQueue) {
+function filterRuleConditionAddValue (buttonElement, setText, setQueue, setStatus) {
     var valuePrefix = jQuery('<span></span>');
     var valueText = jQuery('<input />');
     var valueQueue = jQuery('<select></select>');
+    var valueStatus = jQuery('<select></select>');
     var thisCell = buttonElement.parents('td').first();
     var fieldNumber = buttonElement.parents('tr').first().attr('conditionrow');
 
@@ -428,9 +466,17 @@ function filterRuleConditionAddValue (buttonElement, setText, setQueue) {
     if (setQueue)
         valueQueue.val(setQueue);
 
+    valueStatus.html(jQuery('#Statuses').html());
+    valueStatus.attr('name', conditionSet+'-'+countFilterRuleFields+'-ValueStatus-0');
+    valueStatus.attr('statusvalue', 1);
+    valueStatus.attr('valuenumber', countFilterRuleFieldValues);
+    if (setStatus)
+        valueStatus.val(setStatus);
+
     thisCell.append(valuePrefix);
     thisCell.append(valueText);
     thisCell.append(valueQueue);
+    thisCell.append(valueStatus);
     thisCell.append('<br valuenumber='+countFilterRuleFieldValues+' />');
     thisCell.append('<button action="AddValue">'+<%loc('Add value')|j%>+'</button>');
 
@@ -482,6 +528,11 @@ jQuery(function () {
     jQuery('button[action=AddCondition]').on('click', addFilterRuleCondition);
     jQuery('button[action=AddAction]').on('click', addFilterRuleAction);
     jQuery('#TriggerType').on('change', onTriggerTypeChange);
+\
+%# TODO: pre-populate the requirements
+%# TODO: pre-populate the conflicts
+%# TODO: pre-populate the actions
+\
 });
 </script>
 % }
