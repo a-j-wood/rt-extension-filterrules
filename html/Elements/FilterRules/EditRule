@@ -41,6 +41,23 @@ if ( ( not $Create ) && $FilterRule && $FilterRule->id ) {
 } elsif ( $SetEnabled && ( not $ARGS{'Enabled'} ) ) {
     $EnabledChecked = '';
 }
+
+my %VisibleCustomFields = ();
+my %StatusValues        = ();
+
+foreach my $QueueCollection (
+    $FilterRuleGroup->CanMatchQueuesObj,
+    $FilterRuleGroup->CanTransferQueuesObj
+    )
+{
+    while ( my $QueueObj = $QueueCollection->Next ) {
+        my $TicketCustomFields = $QueueObj->TicketCustomFields;
+        while ( my $CustomField = $TicketCustomFields->Next ) {
+            $VisibleCustomFields{ $CustomField->Name } = $CustomField->id;
+        }
+        $StatusValues{$_} = 1 foreach ( $QueueObj->LifecycleObj->Valid );
+    }
+}
 </%INIT>
 
 <p>
@@ -59,6 +76,7 @@ if ( ( not $Create ) && $FilterRule && $FilterRule->id ) {
 <input type="hidden" name="id" value="<%$FilterRuleGroup->id%>" />
 <input type="hidden" name="Rule" value="<% $Create ? 'new' : $FilterRule->id%>" />
 <input type="hidden" name="ModifyRule" value="1" />
+\
 <table>
 <tr>\
 <th style="text-align:right;"><&|/l&>Name</&>:</th>\
@@ -104,30 +122,43 @@ if ( ( not $Create ) && $FilterRule && $FilterRule->id ) {
 % }
 </td>\
 </tr>
+\
 <tr><td colspan="2"><hr /></td></tr>
 <tr>\
 <th style="text-align:right;vertical-align:top;">\
-<&|/l&>Match conditions</&>:<br />\
+<&|/l&>Requirement conditions</&>:<br />\
 <small><em><&|/l&>Rule must meet all of these</&></em></small>\
 </th>\
-<td style="vertical-align:top;">\
-<span id="Requirements">\
+<td style="vertical-align:top;" class="FilterRules FilterRuleConditions FilterRuleRequirements">\
+% if ($CanModify || $CanCreate) {
+<table>
+<tr emptymarker><td colspan="3"><em><&|/l&>No requirement conditions - rule will never match</&></em></td></tr>
+</table>
+<button type="button" action="AddCondition"><&|/l&>Add condition</&></button>
+% } else {
 <% $FilterRule->DescribeRequirements |n%>\
-</span>\
+% }
 </td>\
 </tr>
+\
 <tr><td colspan="2"><hr /></td></tr>
 <tr>\
 <th style="text-align:right;vertical-align:top;">\
 <&|/l&>Conflict conditions</&>:<br />\
 <small><em><&|/l&>Rule must not meet any of these</&></em></small>\
 </th>\
-<td style="vertical-align:top;">\
-<span id="Conflicts">\
+<td style="vertical-align:top;" class="FilterRules FilterRuleConditions FilterRuleConflicts">\
+% if ($CanModify || $CanCreate) {
+<table>
+<tr emptymarker><td colspan="3"><em><&|/l&>No conflict conditions - rule will match if requirements are met</&></em></td></tr>
+</table>
+<button type="button" action="AddCondition"><&|/l&>Add condition</&></button>
+% } else {
 <% $FilterRule->DescribeConflicts |n%>\
-</span>\
+% }
 </td>\
 </tr>
+\
 % if ($Edit ne 'GroupRequirements') {
 <tr><td colspan="2"><hr /></td></tr>
 <tr>\
@@ -135,13 +166,19 @@ if ( ( not $Create ) && $FilterRule && $FilterRule->id ) {
 <&|/l&>Actions</&>:<br />\
 <small><em><&|/l&>Actions to perform when rule matches</&></em></small>\
 </th>\
-<td style="vertical-align:top;">\
-<span id="Actions">\
+<td style="vertical-align:top;" class="FilterRules FilterRuleActions">\
+% if ($CanModify || $CanCreate) {
+<table>
+<tr emptymarker><td colspan="3"><em><&|/l&>No actions defined</&></em></td></tr>
+</table>
+<button type="button" action="AddAction"><&|/l&>Add action</&></button>
+% } else {
 <% $FilterRule->DescribeActions |n%>\
-</span>\
+% }
 </td>\
 </tr>
 % }
+\
 <tr><td colspan="2"><hr /></td></tr>
 <tr>\
 <th style="text-align:right;"><&|/l&>Stop if matched</&>:</th>\
@@ -162,6 +199,7 @@ if ( ( not $Create ) && $FilterRule && $FilterRule->id ) {
 % }
 </td>\
 </tr>
+\
 % if ($CanModify || $CanCreate) {
 <tr>\
 <td colspan="2"><hr />\
@@ -176,9 +214,172 @@ if ( ( not $Create ) && $FilterRule && $FilterRule->id ) {
 </form>
 \
 % if ($CanCreate || $CanModify) {
+\
+%#   Hidden drop-down lists to use when constructing the form.
+\
+<span style="display:none;">
+\
+<select id="ConditionTypes">
+%     foreach ( RT::Extension::FilterRules->ConditionTypes( $session{'CurrentUser'} ) ) {
+<option\
+ value="<% $_->{'ConditionType'} %>"\
+ triggertypes="<% join (',', @{$_->{'TriggerTypes'}}) %>"\
+ valuetype="<% $_->{'ValueType'} %>"\
+><% $_->{'Name'} %></option>
+%     }
+</select>
+\
+<select id="ActionTypes">
+%     foreach ( RT::Extension::FilterRules->ActionTypes( $session{'CurrentUser'} ) ) {
+<option\
+ value="<% $_->{'ActionType'} %>"\
+ valuetype="<% $_->{'ValueType'} %>"\
+><% $_->{'Name'} %></option>
+%     }
+</select>
+\
+<select id="CanMatchQueues">
+%     my ($Collection, $Item);
+%     $Collection = $FilterRuleGroup->CanMatchQueuesObj;
+%     $Collection->OrderByCols( { 'FIELD' => 'Name', 'ORDER' => 'ASC' } );
+%     while ($Item = $Collection->Next) {
+<option value="<% $Item->id %>"><% $Item->Name %></option>
+%     }
+</select>
+\
+<select id="CanTransferQueues">
+%     $Collection = $FilterRuleGroup->CanTransferQueuesObj;
+%     $Collection->OrderByCols( { 'FIELD' => 'Name', 'ORDER' => 'ASC' } );
+%     while ($Item = $Collection->Next) {
+<option value="<% $Item->id %>"><% $Item->Name %></option>
+%     }
+</select>
+\
+<select id="CanUseGroups">
+%     $Collection = $FilterRuleGroup->CanUseGroupsObj;
+%     $Collection->OrderByCols( { 'FIELD' => 'Name', 'ORDER' => 'ASC' } );
+%     while ($Item = $Collection->Next) {
+<option value="<% $Item->id %>"><% $Item->Name %></option>
+%     }
+</select>
+\
+<select id="CustomFields">
+%     foreach (sort keys %VisibleCustomFields) {
+<option value="<% $VisibleCustomFields{$_} %>"><% $_ %></option>
+%     }
+</select>
+\
+<select id="Statuses">
+%     foreach (sort keys %StatusValues) {
+<option><% $_ %></option>
+%     }
+</select>
+\
+</span>
+\
 <script type="text/javascript">
-%# TODO: replace #Requirements and #Conflicts with condition editors
-%# TODO: replace #Actions with action editor
+%# TODO: pre-populate the requirements
+%# TODO: pre-populate the conflicts
+%# TODO: pre-populate the actions
+\
+var countFilterRuleFields = 0;
+\
+function addFilterRuleCondition () {
+    var newRow = jQuery('<tr></tr>');
+    var cellType = jQuery('<td></td>');
+    var cellValue = jQuery('<td></td>');
+    var cellButton = jQuery('<td></td>');
+    var typeCF = jQuery('<select></select>');
+    var typeType = jQuery('<select></select>');
+    var valueText = jQuery('<input />');
+    var valueQueue = jQuery('<select></select>');
+
+    countFilterRuleFields++;
+
+    var conditionSet = 'Requirements';
+    if (jQuery(this).parents('td').first().hasClass('FilterRuleConflicts'))
+        conditionSet = 'Conflicts';
+
+    typeCF.html(jQuery('#CustomFields').html());
+    typeCF.attr('name', conditionSet+'-'+countFilterRuleFields+'-CustomField');
+    typeCF.attr('typecf', 1);
+
+    typeType.html(jQuery('#ConditionTypes').html());
+    typeType.attr('name', conditionSet+'-'+countFilterRuleFields+'-ConditionType');
+    typeType.attr('settype', 1);
+// TODO: adjust option list according to selected TriggerType
+
+    valueText.attr('type', 'text');
+    valueText.attr('size', '30');
+    valueText.attr('name', conditionSet+'-'+countFilterRuleFields+'-ValueText');
+    valueText.attr('textvalue', 1);
+
+    valueQueue.html(jQuery('#CanMatchQueues').html());
+    valueQueue.attr('name', conditionSet+'-'+countFilterRuleFields+'-ValueQueue');
+    valueQueue.attr('queuevalue', 1);
+
+    cellType.append(typeCF);
+    cellType.append(typeType);
+
+// TODO: append button to remove this value
+// TODO: append button to add new value
+    cellValue.append(valueText);
+    cellValue.append(valueQueue);
+
+    cellButton.append('<button>'+<%loc('Remove condition')|j%>+'</button>');
+
+    newRow.append(cellType);
+    newRow.append(cellValue);
+    newRow.append(cellButton);
+    newRow.attr('conditionrow', countFilterRuleFields);
+
+    jQuery(this).parents('td').first().find('table tr[emptymarker]').hide();
+    jQuery(this).parents('td').first().find('table').append(newRow);
+    jQuery(this).parents('td').first().find('table').find('tr[conditionrow='+countFilterRuleFields+'] select[settype]').on('change', onFilterRuleConditionTypeChange);
+    jQuery(this).parents('td').first().find('table').find('tr[conditionrow='+countFilterRuleFields+'] select[settype]').trigger('change');
+    jQuery(this).parents('td').first().find('table').find('tr[conditionrow='+countFilterRuleFields+'] button').on('click', onFilterRuleConditionRemove);
+}
+\
+function onFilterRuleConditionTypeChange () {
+    var myRow = jQuery(this).parents('tr').first();
+    var selectedOption = myRow.find('select[settype] option:selected');
+
+    if (selectedOption.attr('valuetype') == 'Queue') {
+        myRow.find('input[textvalue]').hide();
+        myRow.find('select[queuevalue]').show();
+    } else if (selectedOption.attr('valuetype') == 'None') {
+        myRow.find('input[textvalue]').hide();
+        myRow.find('select[queuevalue]').hide();
+    } else {
+        myRow.find('input[textvalue]').show();
+        myRow.find('select[queuevalue]').hide();
+    }
+
+    if (/CustomField/.test(selectedOption.attr('value'))) {
+        myRow.find('select[typecf]').show();
+    } else {
+        myRow.find('select[typecf]').hide();
+    }
+}
+\
+function onFilterRuleConditionRemove () {
+    if (!confirm(<%loc('Remove this condition - are you sure?')|j%>))
+        return;
+    var myTable = jQuery(this).parents('table').first();
+    jQuery(this).parents('tr').first().remove();
+    if (myTable.find('tr').length < 2) {
+        myTable.find('tr[emptymarker]').show();
+    }
+}
+\
+function addFilterRuleAction () {
+// TODO: functions to add filter rule actions
+}
+\
+jQuery(function () {
+    jQuery('button[action=AddCondition]').on('click', addFilterRuleCondition);
+    jQuery('button[action=AddAction]').on('click', addFilterRuleAction);
+});
 </script>
 % }
 \

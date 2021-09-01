@@ -581,17 +581,17 @@ sub ConditionTypes {
             'ValueType'     => 'None'
         },
         {   'ConditionType' => 'PriorityIs',
-            'Description'   => $UserObj->loc('Priority is'),
+            'Name'          => $UserObj->loc('Priority is'),
             'TriggerTypes'  => [],
             'ValueType'     => 'Integer'
         },
         {   'ConditionType' => 'PriorityUnder',
-            'Description'   => $UserObj->loc('Priority less than'),
+            'Name'          => $UserObj->loc('Priority less than'),
             'TriggerTypes'  => [],
             'ValueType'     => 'Integer'
         },
         {   'ConditionType' => 'PriorityOver',
-            'Description'   => $UserObj->loc('Priority greater than'),
+            'Name'          => $UserObj->loc('Priority greater than'),
             'TriggerTypes'  => [],
             'ValueType'     => 'Integer'
         },
@@ -614,6 +614,14 @@ sub ConditionTypes {
 
     foreach (@ConditionProviders) {
         push @ConditionTypes, $_->($UserObj);
+    }
+
+    # Convert empty TriggerTypes into lists of all trigger types
+    #
+    foreach (@ConditionTypes) {
+        if ( scalar @{ $_->{'TriggerTypes'} } == 0 ) {
+            $_->{'TriggerTypes'} = [ 'Create', 'QueueMove' ];
+        }
     }
 
     return @ConditionTypes;
@@ -2624,7 +2632,7 @@ only expected to be called from user-facing components.
         if ( $HTML eq '' ) {
             $HTML = '<em>'
                 . $HTML::Mason::Commands::m->interp->apply_escapes(
-                $self->loc('No actions defined.'), 'h' )
+                $self->loc('No actions defined'), 'h' )
                 . '</em>';
         } else {
             $HTML = '<ul>' . $HTML . '</ul>';
