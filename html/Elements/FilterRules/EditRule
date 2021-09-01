@@ -803,16 +803,20 @@ if (   $ARGSRef->{'ModifyRule'}
         ARGSRef       => $ARGSRef
         );
 
-    my ($ok, $msg);
+    my ( $ok, $msg );
 
-($ok, $msg) = $FilterRule->SetConflicts(@{$ParsedSubmissions{'Conflicts'}});
-push @$Results, $msg;
+    ( $ok, $msg )
+        = $FilterRule->SetConflicts( @{ $ParsedSubmissions{'Conflicts'} } );
+    push @$Results, $msg if ($msg);
 
-($ok, $msg) = $FilterRule->SetRequirements(@{$ParsedSubmissions{'Requirements'}});
-push @$Results, $msg;
+    ( $ok, $msg )
+        = $FilterRule->SetRequirements(
+        @{ $ParsedSubmissions{'Requirements'} } );
+    push @$Results, $msg if ($msg);
 
-($ok, $msg) = $FilterRule->SetActions(@{$ParsedSubmissions{'Actions'}});
-push @$Results, $msg;
+    ( $ok, $msg )
+        = $FilterRule->SetActions( @{ $ParsedSubmissions{'Actions'} } );
+    push @$Results, $msg if ($msg);
 
 } elsif ( $ARGSRef->{'MoveUp'} ) {
 

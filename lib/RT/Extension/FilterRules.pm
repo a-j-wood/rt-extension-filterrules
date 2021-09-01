@@ -1693,7 +1693,7 @@ appropriate.  Returns ( I<$ok>, I<$message> ).
         );
 
         my $OldValue = $self->__Value( $args{'Field'} );
-        return ( 1, $self->loc('No change made') )
+        return ( 1, '') )
             if ( ( defined $OldValue )
             && ( defined $args{'Value'} )
             && ( $OldValue eq $args{'Value'} ) );
@@ -3091,7 +3091,7 @@ appropriate.  Returns ( I<$ok>, I<$message> ).
         );
 
         my $OldValue = $self->__Value( $args{'Field'} );
-        return ( 1, $self->loc('No change made') )
+        return ( 1, '' )
             if ( ( defined $OldValue )
             && ( defined $args{'Value'} )
             && ( $OldValue eq $args{'Value'} ) );
