@@ -129,7 +129,7 @@ foreach my $QueueCollection (
 <&|/l&>Requirement conditions</&>:<br />\
 <small><em><&|/l&>Rule must meet all of these</&></em></small>\
 </th>\
-<td style="vertical-align:top;" class="FilterRules FilterRuleConditions FilterRuleRequirements">\
+<td style="vertical-align:top;" conditionset="Requirements">\
 % if ($CanModify || $CanCreate) {
 <table>
 <tr emptymarker><td colspan="3"><em><&|/l&>No requirement conditions - rule will never match</&></em></td></tr>
@@ -147,7 +147,7 @@ foreach my $QueueCollection (
 <&|/l&>Conflict conditions</&>:<br />\
 <small><em><&|/l&>Rule must not meet any of these</&></em></small>\
 </th>\
-<td style="vertical-align:top;" class="FilterRules FilterRuleConditions FilterRuleConflicts">\
+<td style="vertical-align:top;" conditionset="Conflicts">\
 % if ($CanModify || $CanCreate) {
 <table>
 <tr emptymarker><td colspan="3"><em><&|/l&>No conflict conditions - rule will match if requirements are met</&></em></td></tr>
@@ -287,7 +287,8 @@ foreach my $QueueCollection (
 var countFilterRuleFields = 0;
 var countFilterRuleFieldValues = 0;
 \
-function addFilterRuleCondition (setCF, setType, setText, setQueue, setStatus) {
+function addFilterRuleCondition (conditionSet, setCF, setType, setText, setQueue, setStatus) {
+    var mainTable;
     var newRow = jQuery('<tr></tr>');
     var cellType = jQuery('<td></td>');
     var cellValue = jQuery('<td></td>');
@@ -299,11 +300,9 @@ function addFilterRuleCondition (setCF, setType, setText, setQueue, setStatus) {
     var valueQueue = jQuery('<select></select>');
     var valueStatus = jQuery('<select></select>');
 
-    countFilterRuleFields++;
+    mainTable = jQuery('td[conditionset='+conditionSet+'] table').first();
 
-    var conditionSet = 'Requirements';
-    if (jQuery(this).parents('td.FilterRules').first().hasClass('FilterRuleConflicts'))
-        conditionSet = 'Conflicts';
+    countFilterRuleFields++;
 
     if (conditionSet == 'Requirements') {
         typePrefix.text(<%loc('AND')|j%>+' ');
@@ -362,14 +361,14 @@ function addFilterRuleCondition (setCF, setType, setText, setQueue, setStatus) {
     newRow.append(cellButton);
     newRow.attr('conditionrow', countFilterRuleFields);
 
-    jQuery(this).parents('td').first().find('table tr[emptymarker]').hide();
-    jQuery(this).parents('td').first().find('table').append(newRow);
-    jQuery(this).parents('td').first().find('table').find('tr[conditionrow='+countFilterRuleFields+'] select[settype]').on('change', onFilterRuleConditionTypeChange);
-    jQuery(this).parents('td').first().find('table').find('tr[conditionrow='+countFilterRuleFields+'] select[settype]').trigger('change');
-    jQuery(this).parents('td').first().find('table').find('tr[conditionrow='+countFilterRuleFields+'] button').on('click', onFilterRuleConditionButton);
+    mainTable.find('tr[emptymarker]').hide();
+    mainTable.append(newRow);
+    mainTable.find('tr[conditionrow='+countFilterRuleFields+'] select[settype]').on('change', onFilterRuleConditionTypeChange);
+    mainTable.find('tr[conditionrow='+countFilterRuleFields+'] select[settype]').trigger('change');
+    mainTable.find('tr[conditionrow='+countFilterRuleFields+'] button').on('click', onFilterRuleConditionButton);
 
     onTriggerTypeChange();
-    removeFirstLineTypePrefixes(jQuery(this).parents('td').first().find('table'));
+    removeFirstLineTypePrefixes(mainTable);
 }
 \
 function onFilterRuleConditionTypeChange () {
@@ -456,9 +455,7 @@ function filterRuleConditionAddValue (buttonElement, setText, setQueue, setStatu
 
     countFilterRuleFieldValues++;
 
-    var conditionSet = 'Requirements';
-    if (buttonElement.parents('td.FilterRules').first().hasClass('FilterRuleConflicts'))
-        conditionSet = 'Conflicts';
+    conditionSet = buttonElement.parents('td[conditionset]').attr('conditionset');
 
     valuePrefix.append(' <em>'+<%loc('OR')|j%>+'</em> ');
     valuePrefix.attr('valuenumber', countFilterRuleFieldValues);
@@ -537,7 +534,7 @@ function onTriggerTypeChange () {
 }
 \
 jQuery(function () {
-    jQuery('button[action=AddCondition]').on('click', addFilterRuleCondition);
+    jQuery('button[action=AddCondition]').on('click', function () { addFilterRuleCondition(jQuery(this).parents('td[conditionset]').first().attr('conditionset')); });
     jQuery('button[action=AddAction]').on('click', addFilterRuleAction);
     jQuery('#TriggerType').on('change', onTriggerTypeChange);
 \
