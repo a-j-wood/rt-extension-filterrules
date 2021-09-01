@@ -3108,8 +3108,8 @@ appropriate.  Returns ( I<$ok>, I<$message> ).
         # Don't record a transaction for sort order changes, since they are
         # very frequent.
         #
-        # TODO: special "Type" for Conflicts, Requirements, Actions, with
-        # matching %RT::Transaction::_BriefDescription entries.
+        # For Conflicts, Requirements, Actions, we don't record the old and
+        # new values, just the fact that they changed.
         #
         if ( ( $args{'Field'} || '' ) eq 'Disabled' ) {
             my ( $txn_id, $txn_msg, $txn )
@@ -3120,11 +3120,15 @@ appropriate.  Returns ( I<$ok>, I<$message> ).
                 return ( 0, $self->loc( 'Internal error: [_1]', $txn_msg ) );
             }
         } elsif ( ( $args{'Field'} || '' ) ne 'SortOrder' ) {
+            my ($RecordNew, $RecordOld) = ($args{'Value'}, $OldValue);
+            if (($args{'Field'}||'') =~ /^(Conflicts|Requirements|Actions)$/) {
+                ($RecordNew, $RecordOld) = ('(new)', '(old)');
+            }
             my ( $txn_id, $txn_msg, $txn ) = $self->_NewTransaction(
                 'Type'     => 'Set',
                 'Field'    => $args{'Field'},
-                'NewValue' => $args{'Value'},
-                'OldValue' => $OldValue
+                'NewValue' => $RecordNew,
+                'OldValue' => $RecordOld
             );
             if ( not $txn_id ) {
                 $RT::Handle->Rollback();

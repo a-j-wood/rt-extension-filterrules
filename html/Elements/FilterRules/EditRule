@@ -126,24 +126,6 @@ foreach my $QueueCollection (
 <tr><td colspan="2"><hr /></td></tr>
 <tr>\
 <th style="text-align:right;vertical-align:top;">\
-<&|/l&>Requirement conditions</&>:<br />\
-<small><em><&|/l&>Rule must meet all of these</&></em></small>\
-</th>\
-<td style="vertical-align:top;" conditionset="Requirements">\
-% if ($CanModify || $CanCreate) {
-<table>
-<tr emptymarker><td colspan="3"><em><&|/l&>No requirement conditions - rule will never match</&></em></td></tr>
-</table>
-<button type="button" action="AddCondition"><&|/l&>Add condition</&></button>
-% } else {
-<% $FilterRule->DescribeRequirements |n%>\
-% }
-</td>\
-</tr>
-\
-<tr><td colspan="2"><hr /></td></tr>
-<tr>\
-<th style="text-align:right;vertical-align:top;">\
 <&|/l&>Conflict conditions</&>:<br />\
 <small><em><&|/l&>Rule must not meet any of these</&></em></small>\
 </th>\
@@ -155,6 +137,24 @@ foreach my $QueueCollection (
 <button type="button" action="AddCondition"><&|/l&>Add condition</&></button>
 % } else {
 <% $FilterRule->DescribeConflicts |n%>\
+% }
+</td>\
+</tr>
+\
+<tr><td colspan="2"><hr /></td></tr>
+<tr>\
+<th style="text-align:right;vertical-align:top;">\
+<&|/l&>Requirement conditions</&>:<br />\
+<small><em><&|/l&>Rule must meet all of these</&></em></small>\
+</th>\
+<td style="vertical-align:top;" conditionset="Requirements">\
+% if ($CanModify || $CanCreate) {
+<table>
+<tr emptymarker><td colspan="3"><em><&|/l&>No requirement conditions - rule will never match</&></em></td></tr>
+</table>
+<button type="button" action="AddCondition"><&|/l&>Add condition</&></button>
+% } else {
+<% $FilterRule->DescribeRequirements |n%>\
 % }
 </td>\
 </tr>
@@ -286,6 +286,11 @@ foreach my $QueueCollection (
 \
 var countFilterRuleFields = 0;
 var countFilterRuleFieldValues = 0;
+\
+%# Add a new condition, where conditionSet is "Conflicts" or "Requirements"
+%# and the remaining values are what to set the condition and its first
+%# value to.  The new condition's "conditionrow" value will be in
+%# "countFilterRuleFields" afterwards as a side effect.
 \
 function addFilterRuleCondition (conditionSet, setCF, setType, setText, setQueue, setStatus) {
     var mainTable;
@@ -436,7 +441,7 @@ function onFilterRuleConditionTypeChange () {
 function onFilterRuleConditionButton () {
     var action = jQuery(this).attr('action');
     if (action == 'AddValue') {
-       filterRuleConditionAddValue(jQuery(this));
+       filterRuleConditionAddValue(jQuery(this).parents('td[conditionset]').attr('conditionset'), jQuery(this).parents('tr').first().attr('conditionrow'));
     } else if (action == 'RemoveValue') {
        filterRuleConditionRemoveValue(jQuery(this));
     } else if (action == 'RemoveCondition') {
@@ -445,31 +450,33 @@ function onFilterRuleConditionButton () {
     return false;
 }
 \
-function filterRuleConditionAddValue (buttonElement, setText, setQueue, setStatus) {
+%# Add a value to a condition, where conditionSet is "Conflicts" or
+%# "Requirements", conditionRow is the condition's "conditionrow" value, and
+%# the other values are what to set the new value to.
+\
+function filterRuleConditionAddValue (conditionSet, conditionRow, setText, setQueue, setStatus) {
     var valuePrefix = jQuery('<span></span>');
     var valueText = jQuery('<input />');
     var valueQueue = jQuery('<select></select>');
     var valueStatus = jQuery('<select></select>');
-    var thisCell = buttonElement.parents('td').first();
-    var fieldNumber = buttonElement.parents('tr').first().attr('conditionrow');
+    var cellValue = jQuery('td[conditionset='+conditionSet+'] table tr[conditionrow='+conditionRow+'] td[valuecell]').first();
+    var buttonElement = cellValue.find('button[action=AddValue]').first();
 
     countFilterRuleFieldValues++;
-
-    conditionSet = buttonElement.parents('td[conditionset]').attr('conditionset');
 
     valuePrefix.append(' <em>'+<%loc('OR')|j%>+'</em> ');
     valuePrefix.attr('valuenumber', countFilterRuleFieldValues);
 
     valueText.attr('type', 'text');
     valueText.attr('size', '30');
-    valueText.attr('name', conditionSet+'-'+fieldNumber+'-ValueText-'+countFilterRuleFieldValues);
+    valueText.attr('name', conditionSet+'-'+conditionRow+'-ValueText-'+countFilterRuleFieldValues);
     valueText.attr('textvalue', 1);
     valueText.attr('valuenumber', countFilterRuleFieldValues);
     if (setText)
         valueText.val(setText);
 
     valueQueue.html(jQuery('#CanMatchQueues').html());
-    valueQueue.attr('name', conditionSet+'-'+fieldNumber+'-ValueQueue-'+countFilterRuleFieldValues);
+    valueQueue.attr('name', conditionSet+'-'+conditionRow+'-ValueQueue-'+countFilterRuleFieldValues);
     valueQueue.attr('queuevalue', 1);
     valueQueue.attr('valuenumber', countFilterRuleFieldValues);
     if (setQueue)
@@ -482,19 +489,19 @@ function filterRuleConditionAddValue (buttonElement, setText, setQueue, setStatu
     if (setStatus)
         valueStatus.val(setStatus);
 
-    thisCell.append(valuePrefix);
-    thisCell.append(valueText);
-    thisCell.append(valueQueue);
-    thisCell.append(valueStatus);
-    thisCell.append('<br valuenumber='+countFilterRuleFieldValues+' />');
-    thisCell.append('<button action="AddValue">'+<%loc('Add value')|j%>+'</button>');
+    cellValue.append(valuePrefix);
+    cellValue.append(valueText);
+    cellValue.append(valueQueue);
+    cellValue.append(valueStatus);
+    cellValue.append('<br valuenumber='+countFilterRuleFieldValues+' />');
+    cellValue.append('<button action="AddValue">'+<%loc('Add value')|j%>+'</button>');
 
     buttonElement.text(<%loc('Remove value')|j%>);
     buttonElement.attr('action', 'RemoveValue');
     buttonElement.attr('valuenumber', countFilterRuleFieldValues);
 
-    thisCell.find('button').off('click');
-    thisCell.find('button').on('click', onFilterRuleConditionButton);
+    cellValue.find('button').off('click');
+    cellValue.find('button').on('click', onFilterRuleConditionButton);
     buttonElement.parents('tr').first().find('select[settype]').trigger('change');
 }
 \
@@ -538,8 +545,19 @@ jQuery(function () {
     jQuery('button[action=AddAction]').on('click', addFilterRuleAction);
     jQuery('#TriggerType').on('change', onTriggerTypeChange);
 \
-%# TODO: pre-populate the requirements
-%# TODO: pre-populate the conflicts
+%# Pre-populate the requirements and conflicts.
+\
+%     foreach my $ConditionSet ('Conflicts', 'Requirements') {
+%         foreach my $Condition ($FilterRule->$ConditionSet()) {
+%             my @Values = $Condition->Values;
+%             $Values[0] = '' if (not defined $Values[0]);
+    addFilterRuleCondition(<%$ConditionSet|j%>, <%$Condition->CustomField||''|j%>, <%$Condition->ConditionType||''|j%>, <%$Values[0]|j%>, <%$Values[0]|j%>, <%$Values[0]|j%>);
+%             shift @Values;
+%             foreach (grep { defined $_ } @Values) {
+    filterRuleConditionAddValue(<%$ConditionSet|j%>, countFilterRuleFields, <%$_|j%>, <%$_|j%>, <%$_|j%>);
+%             }
+%         }
+%     }
 %# TODO: pre-populate the actions
 \
 });
@@ -676,9 +694,9 @@ if (   $FilterRule
 #
 
 my %ParsedSubmissions
-    = ( 'Requirements' => [], 'Conflicts' => [], 'Actions' => [] );
+    = ( 'Conflicts' => [], 'Requirements' => [], 'Actions' => [] );
 
-foreach my $ConditionGroup ( 'Requirements', 'Conflicts' ) {
+foreach my $ConditionSet ( 'Conflicts', 'Requirements' ) {
     foreach (
         sort {
             my ( $x, $y ) = ( $a, $b );
@@ -686,17 +704,17 @@ foreach my $ConditionGroup ( 'Requirements', 'Conflicts' ) {
             $y =~ s/([0-9]+)/sprintf('%09d',$1)/ge;
             $x cmp $y
         } grep {
-            /^\Q$ConditionGroup\E-\d+-ConditionType/
+            /^\Q$ConditionSet\E-\d+-ConditionType/
         } keys %$ARGSRef
         )
     {
         next if ( !/-(\d+)-/ );
         my $FieldNum = $1;
         my $Details  = {
-            'ConditionType' => $ARGSRef->{ $ConditionGroup . '-'
+            'ConditionType' => $ARGSRef->{ $ConditionSet . '-'
                     . $FieldNum
                     . '-ConditionType' },
-            'CustomField' => $ARGSRef->{ $ConditionGroup . '-'
+            'CustomField' => $ARGSRef->{ $ConditionSet . '-'
                     . $FieldNum
                     . '-CustomField' },
             'Values' => []
@@ -708,7 +726,7 @@ foreach my $ConditionGroup ( 'Requirements', 'Conflicts' ) {
                 $y =~ s/([0-9]+)/sprintf('%09d',$1)/ge;
                 $x cmp $y
             } grep {
-                /^\Q$ConditionGroup\E-\Q$FieldNum\E-[A-Za-z]+-\d+/
+                /^\Q$ConditionSet\E-\Q$FieldNum\E-[A-Za-z]+-\d+/
             } keys %$ARGSRef
             )
         {
@@ -717,7 +735,7 @@ foreach my $ConditionGroup ( 'Requirements', 'Conflicts' ) {
             my $Value    = undef;
             foreach ( 'ValueText', 'ValueQueue', 'ValueStatus' ) {
                 my $ValueField
-                    = $ConditionGroup . '-'
+                    = $ConditionSet . '-'
                     . $FieldNum . '-'
                     . $_ . '-'
                     . $ValueNum;
@@ -728,7 +746,7 @@ foreach my $ConditionGroup ( 'Requirements', 'Conflicts' ) {
             push @{ $Details->{'Values'} }, $Value if ( defined $Value );
         }
 
-        push @{ $ParsedSubmissions{$ConditionGroup} },
+        push @{ $ParsedSubmissions{$ConditionSet} },
             RT::FilterRule::Condition->new( $session{'CurrentUser'},
             %$Details );
     }
