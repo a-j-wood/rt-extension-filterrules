@@ -1693,7 +1693,7 @@ appropriate.  Returns ( I<$ok>, I<$message> ).
         );
 
         my $OldValue = $self->__Value( $args{'Field'} );
-        return ( 1, '') )
+        return ( 1, '' )
             if ( ( defined $OldValue )
             && ( defined $args{'Value'} )
             && ( $OldValue eq $args{'Value'} ) );
