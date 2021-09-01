@@ -302,7 +302,7 @@ function addFilterRuleCondition (setCF, setType, setText, setQueue, setStatus) {
     countFilterRuleFields++;
 
     var conditionSet = 'Requirements';
-    if (jQuery(this).parents('td[FilterRules]').first().hasClass('FilterRuleConflicts'))
+    if (jQuery(this).parents('td.FilterRules').first().hasClass('FilterRuleConflicts'))
         conditionSet = 'Conflicts';
 
     if (conditionSet == 'Requirements') {
@@ -380,26 +380,35 @@ function onFilterRuleConditionTypeChange () {
         myRow.find('td[valuecell] button').show();
         myRow.find('input[textvalue]').hide();
         myRow.find('input[textvalue]').prop('required', false);
+        myRow.find('input[textvalue]').prop('disabled', true);
         myRow.find('select[queuevalue]').show();
         myRow.find('select[queuevalue]').prop('required', true);
+        myRow.find('select[queuevalue]').prop('disabled', false);
         myRow.find('select[statusvalue]').hide();
         myRow.find('select[statusvalue]').prop('required', false);
+        myRow.find('select[statusvalue]').prop('disabled', true);
     } else if (selectedOption.attr('valuetype') == 'Status') {
         myRow.find('td[valuecell] button').show();
         myRow.find('input[textvalue]').hide();
         myRow.find('input[textvalue]').prop('required', false);
+        myRow.find('input[textvalue]').prop('disabled', true);
         myRow.find('select[queuevalue]').hide();
         myRow.find('select[queuevalue]').prop('required', false);
+        myRow.find('select[queuevalue]').prop('disabled', true);
         myRow.find('select[statusvalue]').show();
         myRow.find('select[statusvalue]').prop('required', true);
+        myRow.find('select[statusvalue]').prop('disabled', false);
     } else if (selectedOption.attr('valuetype') == 'None') {
         myRow.find('td[valuecell] button').hide();
         myRow.find('input[textvalue]').hide();
         myRow.find('input[textvalue]').prop('required', false);
+        myRow.find('input[textvalue]').prop('disabled', true);
         myRow.find('select[queuevalue]').hide();
         myRow.find('select[queuevalue]').prop('required', false);
+        myRow.find('select[queuevalue]').prop('disabled', true);
         myRow.find('select[statusvalue]').hide();
         myRow.find('select[statusvalue]').prop('required', false);
+        myRow.find('select[statusvalue]').prop('disabled', true);
     } else {
         myRow.find('td[valuecell] button').show();
         if (selectedOption.attr('valuetype') == 'Integer') {
@@ -409,10 +418,13 @@ function onFilterRuleConditionTypeChange () {
         }
         myRow.find('input[textvalue]').show();
         myRow.find('input[textvalue]').prop('required', true);
+        myRow.find('input[textvalue]').prop('disabled', false);
         myRow.find('select[queuevalue]').hide();
         myRow.find('select[queuevalue]').prop('required', false);
+        myRow.find('select[queuevalue]').prop('disabled', true);
         myRow.find('select[statusvalue]').hide();
         myRow.find('select[statusvalue]').prop('required', false);
+        myRow.find('select[statusvalue]').prop('disabled', true);
     }
 
     if (/CustomField/.test(selectedOption.attr('value'))) {
@@ -445,7 +457,7 @@ function filterRuleConditionAddValue (buttonElement, setText, setQueue, setStatu
     countFilterRuleFieldValues++;
 
     var conditionSet = 'Requirements';
-    if (buttonElement.parents('td[FilterRules]').first().hasClass('FilterRuleConflicts'))
+    if (buttonElement.parents('td.FilterRules').first().hasClass('FilterRuleConflicts'))
         conditionSet = 'Conflicts';
 
     valuePrefix.append(' <em>'+<%loc('OR')|j%>+'</em> ');
@@ -662,6 +674,71 @@ if (   $FilterRule
     return;
 }
 
+# Parse form submissions to build up a new list of requirements, conflicts,
+# and actions.
+#
+
+my %ParsedSubmissions
+    = ( 'Requirements' => [], 'Conflicts' => [], 'Actions' => [] );
+
+foreach my $ConditionGroup ( 'Requirements', 'Conflicts' ) {
+    foreach (
+        sort {
+            my ( $x, $y ) = ( $a, $b );
+            $x =~ s/([0-9]+)/sprintf('%09d',$1)/ge;
+            $y =~ s/([0-9]+)/sprintf('%09d',$1)/ge;
+            $x cmp $y
+        } grep {
+            /^\Q$ConditionGroup\E-\d+-ConditionType/
+        } keys %$ARGSRef
+        )
+    {
+        next if ( !/-(\d+)-/ );
+        my $FieldNum = $1;
+        my $Details  = {
+            'ConditionType' => $ARGSRef->{ $ConditionGroup . '-'
+                    . $FieldNum
+                    . '-ConditionType' },
+            'CustomField' => $ARGSRef->{ $ConditionGroup . '-'
+                    . $FieldNum
+                    . '-CustomField' },
+            'Values' => []
+        };
+        foreach (
+            sort {
+                my ( $x, $y ) = ( $a, $b );
+                $x =~ s/([0-9]+)/sprintf('%09d',$1)/ge;
+                $y =~ s/([0-9]+)/sprintf('%09d',$1)/ge;
+                $x cmp $y
+            } grep {
+                /^\Q$ConditionGroup\E-\Q$FieldNum\E-[A-Za-z]+-\d+/
+            } keys %$ARGSRef
+            )
+        {
+            next if ( !/-(\d+)$/ );
+            my $ValueNum = $1;
+            my $Value    = undef;
+            foreach ( 'ValueText', 'ValueQueue', 'ValueStatus' ) {
+                my $ValueField
+                    = $ConditionGroup . '-'
+                    . $FieldNum . '-'
+                    . $_ . '-'
+                    . $ValueNum;
+                next if ( not exists $ARGSRef->{$ValueField} );
+                $Value = $ARGSRef->{$ValueField};
+                last;
+            }
+            push @{ $Details->{'Values'} }, $Value if ( defined $Value );
+        }
+
+        push @{ $ParsedSubmissions{$ConditionGroup} },
+            RT::FilterRule::Condition->new( $session{'CurrentUser'},
+            %$Details );
+    }
+}
+
+# TODO: parse actions
+
 if (   $ARGSRef->{'ModifyRule'}
     && ( $ARGSRef->{'Rule'} eq 'new' )
     && not $CanCreate )
@@ -682,13 +759,11 @@ if (   $ARGSRef->{'ModifyRule'}
         'Name'          => $ARGSRef->{'Name'},
         'TriggerType'   => $ARGSRef->{'TriggerType'},
         'StopIfMatched' => $ARGSRef->{'StopIfMatched'} ? 1 : 0,
-        'Conflicts'     => [],
-        'Requirements'  => [],
-        'Actions'       => [],
+        'Conflicts'     => $ParsedSubmissions{'Conflicts'},
+        'Requirements'  => $ParsedSubmissions{'Requirements'},
+        'Actions'       => $ParsedSubmissions{'Actions'},
         'Disabled'      => $ARGSRef->{'Enabled'} ? 0 : 1,
     );
-
-    # TODO: parse conflicts, requirements, and actions
 
     my ( $ok, $msg );
 
@@ -728,7 +803,16 @@ if (   $ARGSRef->{'ModifyRule'}
         ARGSRef       => $ARGSRef
         );
 
-    # TODO: modify rule conflicts, requirements, actions
+    my ($ok, $msg);
+
+($ok, $msg) = $FilterRule->SetConflicts(@{$ParsedSubmissions{'Conflicts'}});
+push @$Results, $msg;
+
+($ok, $msg) = $FilterRule->SetRequirements(@{$ParsedSubmissions{'Requirements'}});
+push @$Results, $msg;
+
+($ok, $msg) = $FilterRule->SetActions(@{$ParsedSubmissions{'Actions'}});
+push @$Results, $msg;
 
 } elsif ( $ARGSRef->{'MoveUp'} ) {
 

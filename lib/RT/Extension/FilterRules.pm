@@ -2248,7 +2248,7 @@ conditions.  Uses B<DescribeConditions>.
                 'h'
                 ) . '</em>';
         } else {
-            $HTML = $self->loc('Do not match if') . ':<br />';
+            $HTML = $self->loc('Do not match if') . ':<br />' . $HTML;
         }
 
         return $HTML;
@@ -2347,7 +2347,7 @@ conditions.  Uses B<DescribeConditions>.
                 'h'
                 ) . '</em>';
         } else {
-            $HTML = $self->loc('Match if') . ':<br />';
+            $HTML = $self->loc('Match if') . ':<br />' . $HTML;
         }
 
         return $HTML;
@@ -2368,17 +2368,21 @@ only expected to be called from user-facing components.
     sub DescribeConditions {
         my ( $self, $Aggregator, @Conditions ) = @_;
 
-        my $ConditionTypeName = $HTML::Mason::Commands::m->notes(
-            'FilterRules-ConditionTypeName');
-        if ( not $ConditionTypeName ) {
-            $ConditionTypeName = {};
+        my $ConditionTypeDetail = $HTML::Mason::Commands::m->notes(
+            'FilterRules-ConditionTypeDetail');
+        if ( not $ConditionTypeDetail ) {
+            $ConditionTypeDetail = {};
             my @ConditionTypes = RT::Extension::FilterRules->ConditionTypes(
                 $self->CurrentUser );
             foreach (@ConditionTypes) {
-                $ConditionTypeName->{ $_->{'ConditionType'} } = $_->{'Name'};
+                $ConditionTypeDetail->{ $_->{'ConditionType'} } = {
+                    'Name'      => $_->{'Name'},
+                    'ValueType' => $_->{'ValueType'}
+                };
             }
-            $HTML::Mason::Commands::m->notes( 'FilterRules-ConditionTypeName',
-                $ConditionTypeName );
+            $HTML::Mason::Commands::m->notes(
+                'FilterRules-ConditionTypeDetail',
+                $ConditionTypeDetail );
         }
 
         my $HTML = '';
@@ -2407,15 +2411,19 @@ only expected to be called from user-facing components.
                 $HTML .= ' ';
             }
             $HTML .= $HTML::Mason::Commands::m->interp->apply_escapes(
-                (          $ConditionTypeName->{ $Condition->ConditionType }
-                        || $Condition->ConditionType
+                (   $ConditionTypeDetail->{ $Condition->ConditionType }
+                        ->{'Name'} || $Condition->ConditionType
                 ),
                 'h'
             );
 
             my @Values = $Condition->Values;
 
-            if ( $Condition->ValueType eq 'Queue' ) {
+            my $ValueType
+                = $ConditionTypeDetail->{ $Condition->ConditionType }
+                ->{'ValueType'} || '';
+
+            if ( $ValueType eq 'Queue' ) {
                 @Values = map {
                     my $x = $QueueObj->Load($_) ? $QueueObj->Name : '#' . $_;
                     '"'
@@ -2423,7 +2431,7 @@ only expected to be called from user-facing components.
                         $x, 'h' )
                         . '"';
                 } @Values;
-            } elsif ( $Condition->ValueType ne 'None' ) {
+            } elsif ( $ValueType ne 'None' ) {
                 @Values = map {
                     '"'
                         . $HTML::Mason::Commands::m->interp->apply_escapes(
@@ -2529,17 +2537,20 @@ only expected to be called from user-facing components.
     sub DescribeActions {
         my ($self) = @_;
 
-        my $ActionTypeName
-            = $HTML::Mason::Commands::m->notes('FilterRules-ActionNameMap');
-        if ( not $ActionTypeName ) {
-            $ActionTypeName = {};
+        my $ActionTypeDetail = $HTML::Mason::Commands::m->notes(
+            'FilterRules-ActionTypeDetail');
+        if ( not $ActionTypeDetail ) {
+            $ActionTypeDetail = {};
             my @ActionTypes = RT::Extension::FilterRules->ActionTypes(
                 $self->CurrentUser );
             foreach (@ActionTypes) {
-                $ActionTypeName->{ $_->{'ActionType'} } = $_->{'Name'};
+                $ActionTypeDetail->{ $_->{'ActionType'} } = {
+                    'Name'      => $_->{'Name'},
+                    'ValueType' => $_->{'ValueType'}
+                };
             }
-            $HTML::Mason::Commands::m->notes( 'FilterRules-ActionTypeName',
-                $ActionTypeName );
+            $HTML::Mason::Commands::m->notes( 'FilterRules-ActionTypeDetail',
+                $ActionTypeDetail );
         }
 
         my $HTML = '';
@@ -2550,7 +2561,7 @@ only expected to be called from user-facing components.
         foreach my $Action ( $self->Actions ) {
             $HTML .= '<li>'
                 . $HTML::Mason::Commands::m->interp->apply_escapes(
-                (          $ActionTypeName->{ $Action->ActionType }
+                (   $ActionTypeDetail->{ $Action->ActionType }->{'Name'}
                         || $Action->ActionType
                 ),
                 'h'
@@ -2572,7 +2583,11 @@ only expected to be called from user-facing components.
                 $HTML .= ' ';
             }
 
-            if ( $Action->ValueType eq 'Queue' ) {
+            my $ValueType
+                = $ActionTypeDetail->{ $Action->ActionType }->{'ValueType'}
+                || '';
+
+            if ( $ValueType eq 'Queue' ) {
                 $HTML .= ': ';
                 if ( $QueueObj->Load( $Action->Value ) ) {
                     $HTML .= '"'
@@ -2585,7 +2600,7 @@ only expected to be called from user-facing components.
                         $Action->Value, 'h' )
                         . '"';
                 }
-            } elsif ( $Action->ValueType eq 'CustomField' ) {
+            } elsif ( $ValueType eq 'CustomField' ) {
                 $HTML .= ': ';
                 if ( $CustomFieldObj->Load( $Action->Value ) ) {
                     $HTML .= '"'
@@ -2598,7 +2613,7 @@ only expected to be called from user-facing components.
                         $Action->Value, 'h' )
                         . '"';
                 }
-            } elsif ( $Action->ValueType !~ /^(None|HTML)$/ ) {
+            } elsif ( $ValueType !~ /^(None|HTML)$/ ) {
                 $HTML .= ': "'
                     . $HTML::Mason::Commands::m->interp->apply_escapes(
                     $Action->Value, 'h' )
