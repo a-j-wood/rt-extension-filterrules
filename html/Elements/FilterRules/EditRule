@@ -283,12 +283,14 @@ foreach my $QueueCollection (
 %# TODO: pre-populate the actions
 \
 var countFilterRuleFields = 0;
+var countFilterRuleFieldValues = 0;
 \
-function addFilterRuleCondition () {
+function addFilterRuleCondition (setCF, setType, setText, setQueue) {
     var newRow = jQuery('<tr></tr>');
     var cellType = jQuery('<td></td>');
     var cellValue = jQuery('<td></td>');
     var cellButton = jQuery('<td></td>');
+    var typePrefix = jQuery('<em></em>');
     var typeCF = jQuery('<select></select>');
     var typeType = jQuery('<select></select>');
     var valueText = jQuery('<input />');
@@ -297,36 +299,51 @@ function addFilterRuleCondition () {
     countFilterRuleFields++;
 
     var conditionSet = 'Requirements';
-    if (jQuery(this).parents('td').first().hasClass('FilterRuleConflicts'))
+    if (jQuery(this).parents('td[FilterRules]').first().hasClass('FilterRuleConflicts'))
         conditionSet = 'Conflicts';
+
+    if (conditionSet == 'Requirements') {
+        typePrefix.text(<%loc('AND')|j%>+' ');
+    } else {
+        typePrefix.text(<%loc('OR')|j%>+' ');
+    }
 
     typeCF.html(jQuery('#CustomFields').html());
     typeCF.attr('name', conditionSet+'-'+countFilterRuleFields+'-CustomField');
     typeCF.attr('typecf', 1);
+    if (setCF)
+        typeCF.val(setCF);
 
     typeType.html(jQuery('#ConditionTypes').html());
     typeType.attr('name', conditionSet+'-'+countFilterRuleFields+'-ConditionType');
     typeType.attr('settype', 1);
-// TODO: adjust option list according to selected TriggerType
+    if (setType)
+        typeType.val(setType);
 
     valueText.attr('type', 'text');
     valueText.attr('size', '30');
-    valueText.attr('name', conditionSet+'-'+countFilterRuleFields+'-ValueText');
+    valueText.attr('name', conditionSet+'-'+countFilterRuleFields+'-ValueText-0');
     valueText.attr('textvalue', 1);
+    if (setText)
+        valueText.val(setText);
 
     valueQueue.html(jQuery('#CanMatchQueues').html());
-    valueQueue.attr('name', conditionSet+'-'+countFilterRuleFields+'-ValueQueue');
+    valueQueue.attr('name', conditionSet+'-'+countFilterRuleFields+'-ValueQueue-0');
     valueQueue.attr('queuevalue', 1);
+    if (setQueue)
+        valueQueue.val(setQueue);
 
+    cellType.append(typePrefix);
     cellType.append(typeCF);
     cellType.append(typeType);
 
-// TODO: append button to remove this value
-// TODO: append button to add new value
+    cellValue.attr('valuecell', 1);
     cellValue.append(valueText);
     cellValue.append(valueQueue);
+    cellValue.append('<br />');
+    cellValue.append('<button action="AddValue">'+<%loc('Add value')|j%>+'</button>');
 
-    cellButton.append('<button>'+<%loc('Remove condition')|j%>+'</button>');
+    cellButton.append('<button action="RemoveCondition">'+<%loc('Remove condition')|j%>+'</button>');
 
     newRow.append(cellType);
     newRow.append(cellValue);
@@ -337,7 +354,10 @@ function addFilterRuleCondition () {
     jQuery(this).parents('td').first().find('table').append(newRow);
     jQuery(this).parents('td').first().find('table').find('tr[conditionrow='+countFilterRuleFields+'] select[settype]').on('change', onFilterRuleConditionTypeChange);
     jQuery(this).parents('td').first().find('table').find('tr[conditionrow='+countFilterRuleFields+'] select[settype]').trigger('change');
-    jQuery(this).parents('td').first().find('table').find('tr[conditionrow='+countFilterRuleFields+'] button').on('click', onFilterRuleConditionRemove);
+    jQuery(this).parents('td').first().find('table').find('tr[conditionrow='+countFilterRuleFields+'] button').on('click', onFilterRuleConditionButton);
+
+    onTriggerTypeChange();
+    removeFirstLineTypePrefixes(jQuery(this).parents('td').first().find('table'));
 }
 \
 function onFilterRuleConditionTypeChange () {
@@ -345,12 +365,15 @@ function onFilterRuleConditionTypeChange () {
     var selectedOption = myRow.find('select[settype] option:selected');
 
     if (selectedOption.attr('valuetype') == 'Queue') {
+        myRow.find('td[valuecell] button').show();
         myRow.find('input[textvalue]').hide();
         myRow.find('select[queuevalue]').show();
     } else if (selectedOption.attr('valuetype') == 'None') {
+        myRow.find('td[valuecell] button').hide();
         myRow.find('input[textvalue]').hide();
         myRow.find('select[queuevalue]').hide();
     } else {
+        myRow.find('td[valuecell] button').show();
         myRow.find('input[textvalue]').show();
         myRow.find('select[queuevalue]').hide();
     }
@@ -362,23 +385,103 @@ function onFilterRuleConditionTypeChange () {
     }
 }
 \
-function onFilterRuleConditionRemove () {
+function onFilterRuleConditionButton () {
+    var action = jQuery(this).attr('action');
+    if (action == 'AddValue') {
+       filterRuleConditionAddValue(jQuery(this));
+    } else if (action == 'RemoveValue') {
+       filterRuleConditionRemoveValue(jQuery(this));
+    } else if (action == 'RemoveCondition') {
+       filterRuleConditionRemoveCondition(jQuery(this));
+    }
+    return false;
+}
+\
+function filterRuleConditionAddValue (buttonElement, setText, setQueue) {
+    var valuePrefix = jQuery('<span></span>');
+    var valueText = jQuery('<input />');
+    var valueQueue = jQuery('<select></select>');
+    var thisCell = buttonElement.parents('td').first();
+    var fieldNumber = buttonElement.parents('tr').first().attr('conditionrow');
+
+    countFilterRuleFieldValues++;
+
+    var conditionSet = 'Requirements';
+    if (buttonElement.parents('td[FilterRules]').first().hasClass('FilterRuleConflicts'))
+        conditionSet = 'Conflicts';
+
+    valuePrefix.append(' <em>'+<%loc('OR')|j%>+'</em> ');
+    valuePrefix.attr('valuenumber', countFilterRuleFieldValues);
+
+    valueText.attr('type', 'text');
+    valueText.attr('size', '30');
+    valueText.attr('name', conditionSet+'-'+fieldNumber+'-ValueText-'+countFilterRuleFieldValues);
+    valueText.attr('textvalue', 1);
+    valueText.attr('valuenumber', countFilterRuleFieldValues);
+    if (setText)
+        valueText.val(setText);
+
+    valueQueue.html(jQuery('#CanMatchQueues').html());
+    valueQueue.attr('name', conditionSet+'-'+fieldNumber+'-ValueQueue-'+countFilterRuleFieldValues);
+    valueQueue.attr('queuevalue', 1);
+    valueQueue.attr('valuenumber', countFilterRuleFieldValues);
+    if (setQueue)
+        valueQueue.val(setQueue);
+
+    thisCell.append(valuePrefix);
+    thisCell.append(valueText);
+    thisCell.append(valueQueue);
+    thisCell.append('<br valuenumber='+countFilterRuleFieldValues+' />');
+    thisCell.append('<button action="AddValue">'+<%loc('Add value')|j%>+'</button>');
+
+    buttonElement.text(<%loc('Remove value')|j%>);
+    buttonElement.attr('action', 'RemoveValue');
+    buttonElement.attr('valuenumber', countFilterRuleFieldValues);
+
+    thisCell.find('button').off('click');
+    thisCell.find('button').on('click', onFilterRuleConditionButton);
+    buttonElement.parents('tr').first().find('select[settype]').trigger('change');
+}
+\
+function filterRuleConditionRemoveValue (buttonElement) {
+    var valueNumber = buttonElement.attr('valuenumber');
+    buttonElement.parents('table').first().find('[valuenumber='+valueNumber+']').remove();
+}
+\
+function filterRuleConditionRemoveCondition (buttonElement) {
     if (!confirm(<%loc('Remove this condition - are you sure?')|j%>))
         return;
-    var myTable = jQuery(this).parents('table').first();
-    jQuery(this).parents('tr').first().remove();
+    var myTable = buttonElement.parents('table').first();
+    buttonElement.parents('tr').first().remove();
     if (myTable.find('tr').length < 2) {
         myTable.find('tr[emptymarker]').show();
     }
+    removeFirstLineTypePrefixes(myTable);
+}
+\
+function removeFirstLineTypePrefixes(table) {
+    table.find('tr[conditionrow]').first().find('td > em').remove();
 }
 \
 function addFilterRuleAction () {
 // TODO: functions to add filter rule actions
 }
 \
+function onTriggerTypeChange () {
+    var triggerType = jQuery('#TriggerType').val();
+    jQuery('select[settype] option').each(function () {
+        if (jQuery(this).attr('triggertypes').includes(triggerType)) {
+            jQuery(this).prop('disabled', false);
+        } else {
+            jQuery(this).prop('disabled', true);
+        }
+    });
+}
+\
 jQuery(function () {
     jQuery('button[action=AddCondition]').on('click', addFilterRuleCondition);
     jQuery('button[action=AddAction]').on('click', addFilterRuleAction);
+    jQuery('#TriggerType').on('change', onTriggerTypeChange);
 });
 </script>
 % }
