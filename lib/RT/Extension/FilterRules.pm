@@ -2621,8 +2621,8 @@ only expected to be called from user-facing components.
             }
 
             if ( $Action->IsNotification ) {
-                $HTML .= ' &rarr; ';
                 if ( $Action->ActionType =~ /Group/ ) {
+                    $HTML .= ' &rarr; ';
                     if ( $CustomFieldObj->Load( $Action->Notify ) ) {
                         $HTML .= '"'
                             . $HTML::Mason::Commands::m->interp
