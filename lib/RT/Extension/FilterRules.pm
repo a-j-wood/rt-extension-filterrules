@@ -80,7 +80,7 @@ Filter rule processing
 
 =item Condition:
 
-On Transaction
+User Defined
 
 =item Action:
 
