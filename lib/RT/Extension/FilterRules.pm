@@ -2014,7 +2014,8 @@ Consider this rule when the ticket moves between queues
 =item B<StopIfMatched>
 
 If this is true, then processing of the remaining rules in this filter rule
-group should be skipped if this rule matches
+group should be skipped if this rule matches (this field is unused for
+filter rule group requirement rules, i.e. where B<IsGroupRequirement> is 1)
 
 =item B<Conflicts>
 
@@ -2032,10 +2033,10 @@ above.
 =item B<Actions>
 
 Actions to carry out on the ticket if the rule matches (this field is unused
-for filter rule group applicability rules, i.e.  where B<IsGroupRequirement>
-is 1); it is presented as an array of C<RT::FilterRule::Action>
-objects, and stored as a Base64-encoded string encoding an array ref
-containing hash refs.
+for filter rule group requirement rules, i.e. where B<IsGroupRequirement>
+is 1); it is presented as an array of C<RT::FilterRule::Action> objects, and
+stored as a Base64-encoded string encoding an array ref containing hash
+refs.
 
 =item B<Creator>
 
@@ -2537,7 +2538,7 @@ to carry out on the ticket if the rule matches.
 =head2 SetActions ACTION, ACTION, ...
 
 Set the actions to carry out on the ticket if the rule matches; this field
-is unused for filter rule group applicability rules (where
+is unused for filter rule group requirement rules (where
 B<IsGroupRequirement> is 1).  Expects an array of C<RT::FilterRule::Action>
 objects.
 

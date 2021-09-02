@@ -39,13 +39,19 @@ my $Format
     . "'<a href=\"$PageLink?id="
     . $FilterRuleGroup->id
     . "&amp;Rule=__id__\">__Name__</a>',"
-    . "'__TriggerType__',"
-    . "'__StopIfMatched__',"
-    . "'__Conflicts__',"
+    . "'__TriggerType__'";
+
+$Format .= ",'__StopIfMatched__'"
+    if ( $Edit eq 'FilterRules' );
+
+$Format .= ",'__Conflicts__',"
     . "'__Requirements__'";
+
 $Format .= ",'__Actions__'," . "'__MatchCounts__'"
     if ( $Edit eq 'FilterRules' );
+
 $Format .= ",'__Disabled__'";
+
 $Format .= ",'__MoveFilterRule__'" if ($CanModify);
 </%INIT>
 \

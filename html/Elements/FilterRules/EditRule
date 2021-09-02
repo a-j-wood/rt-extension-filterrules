@@ -182,23 +182,24 @@ tr[conditionrow] td, tr[actionrow] td { border-bottom: solid #888 1px; padding-t
 <small><em><&|/l&>Actions to perform when rule matches</&></em></small>\
 </th>\
 <td style="vertical-align:top;" actionset="Actions">\
-% if ($CanModify || $CanCreate) {
+%     if ($CanModify || $CanCreate) {
 <table border="0" cellspacing="0" cellpadding="4">
 <tr emptymarker><td colspan="3"><em><&|/l&>No actions defined</&></em></td></tr>
 </table>
 <button type="button" action="AddAction"><&|/l&>Add action</&></button>
-% } else {
+%     } else {
 <% $FilterRule->DescribeActions |n%>\
-% }
+%     }
 </td>\
 </tr>
 % }
 \
+% if ($Edit ne 'GroupRequirements') {
 <tr><td colspan="2"><hr /></td></tr>
 <tr>\
 <th style="text-align:right;"><&|/l&>Stop if matched</&>:</th>\
 <td>\
-% if ($CanModify || $CanCreate) {
+%     if ($CanModify || $CanCreate) {
 <select name="StopIfMatched">\
 <option value="0"<% ( $Create ? $ARGS{'StopIfMatched'} : $FilterRule->StopIfMatched ) ? '' : ' selected' %>>\
 <&|/l&>No - continue processing remaining rules if this rule matches</&>\
@@ -207,13 +208,14 @@ tr[conditionrow] td, tr[actionrow] td { border-bottom: solid #888 1px; padding-t
 <&|/l&>Yes - stop processing remaining rules if this rule matches</&>\
 </option>\
 </select>\
-% } elsif ($FilterRule->StopIfMatched) {
+%     } elsif ($FilterRule->StopIfMatched) {
 <&|/l&>Yes - stop processing remaining rules if this rule matches</&>\
-% } else {
+%     } else {
 <&|/l&>No - continue processing remaining rules if this rule matches</&>\
-% }
+%     }
 </td>\
 </tr>
+% }
 \
 % if ($CanModify || $CanCreate) {
 <tr>\
