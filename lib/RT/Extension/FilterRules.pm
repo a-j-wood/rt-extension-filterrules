@@ -225,7 +225,49 @@ until you define some.
 From I<Admin> - I<Filter rule groups>, click on your new filter rule group,
 and then choose I<Requirements> from the page menu at the top.
 
-(TODO)
+Click on the B<Create new requirement rule> button to create a new
+requirement rule for that filter rule group.
+
+=over
+
+=item 1.
+
+Give the requirement rule a name, such as I<"Created in the General queue">.
+
+=item 2.
+
+Set the trigger type.  This rule will be processed when an event of this
+type occurs, and skipped over otherwise.  The available trigger types are
+I<"On ticket creation"> and I<"When a ticket moves between queues">; for
+this example, select I<"On ticket creation">.
+
+=item 3.
+
+Choose the conflict conditions.  If I<any> of these conditions are met, the
+rule will I<not> match.  For this example, leave this empty.
+
+=item 4.
+
+Choose the requirement conditions.  I<All> of these conditions must be met
+for the rule to match.  Click the B<Add condition> button, choose a I<"In
+queue">, and select the I<"General"> queue.
+
+For each condition, although all of the conditions must be met, you can
+specify multiple values for each condition using the B<Add value> button for
+that condition.  This means that the condition will be met if any one of its
+values matches.
+
+=item 5.
+
+Click on the B<Create> button to create the new requirement rule.
+
+In the list of requirement rules, click on a rule's number or name to edit
+it.
+
+Add as many requirement rules as you need.  They can be switched off
+temporarily by marking them as disabled.
+
+=back
 
 =head2 Delegate control of the filter rule group
 
