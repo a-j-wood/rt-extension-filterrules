@@ -27,6 +27,11 @@ my @Results = ();
 
 my $Collection = RT::FilterRuleGroups->new( $session{'CurrentUser'} );
 $Collection->UnLimit;
+$Collection->Limit(
+    'FIELD'    => 'Disabled',
+    'VALUE'    => 0,
+    'OPERATOR' => '='
+);
 
 # Build a collection containing only the filter rule groups the current user
 # can see.
@@ -66,8 +71,7 @@ if ( $Collection->Count() == 1 ) {
 my $Format
     = "'<a href=\"__WebPath__/Tools/FilterRules.html?id=__id__\">__id__</a>/TITLE:#',"
     . "'<a href=\"__WebPath__/Tools/FilterRules.html?id=__id__\">__Name__</a>',"
-    . "'__FilterRulesCount__',"
-    . "'__Disabled__'";
+    . "'__FilterRulesCount__'";
 </%INIT>
 \
 <& /Elements/Header, Title => $Title &>
