@@ -47,10 +47,10 @@ $Format .= ",'__StopIfMatched__'"
 $Format .= ",'__Conflicts__',"
     . "'__Requirements__'";
 
-$Format .= ",'__Actions__'," . "'__MatchCounts__'"
+$Format .= ",'__Actions__'"
     if ( $Edit eq 'FilterRules' );
 
-$Format .= ",'__Disabled__'";
+$Format .= ",'__MatchCounts__','__Disabled__'";
 
 $Format .= ",'__MoveFilterRule__'" if ($CanModify);
 </%INIT>

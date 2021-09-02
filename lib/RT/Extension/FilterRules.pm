@@ -468,6 +468,7 @@ sub ScripCommit {
             'From'            => $QueueFrom,
             'To'              => $QueueTo,
             'Ticket'          => $Action->TicketObj,
+            'RecordMatch'     => 1,
             'IncludeDisabled' => 0
             );
         next if ( not $Matched );
@@ -480,6 +481,7 @@ sub ScripCommit {
             'From'            => $QueueFrom,
             'To'              => $QueueTo,
             'Ticket'          => $Action->TicketObj,
+            'RecordMatch'     => 1,
             'IncludeDisabled' => 0
             );
     }
@@ -1497,6 +1499,10 @@ will be added to I<RuleChecks> regardless of whether they influenced the
 outcome; this can be used to present the operator with details of how an
 event would be processed.
 
+If I<RecordMatch> is true, then the fact that a rule is matched will be
+recorded in the database (see C<RT::FilterRuleMatch>).  The default is not
+to record the match.
+
 A I<Cache> should be provided, pointing to a hash reference to store
 information in while processing this event, which the caller should share
 with the B<CheckFilterRules> method and other instances of this class, for
@@ -1518,6 +1524,7 @@ entries, and for the event structure.
             'Ticket'          => 0,
             'IncludeDisabled' => 0,
             'DescribeAll'     => 0,
+            'RecordMatch'     => 0,
             'Cache'           => {},
             @_
         );
@@ -1556,6 +1563,8 @@ entries, and for the event structure.
                     $ItemMatch,      $ItemMessage,
                     $ItemEventValue, $ItemTargetValue
                     );
+                $Item->RecordMatch( 'Ticket' => $args{'Ticket'} )
+                    if ( $args{'RecordMatch'} );
                 last if ( not $args{'DescribeAll'} );
             }
         }
@@ -2445,6 +2454,7 @@ only expected to be called from user-facing components.
         my $HTML = '';
 
         my $CustomFieldObj = RT::CustomField->new( $self->CurrentUser );
+        my $GroupObj       = RT::Group->new( $self->CurrentUser );
         my $QueueObj       = RT::Queue->new( $self->CurrentUser );
 
         foreach my $Condition (@Conditions) {
@@ -2483,6 +2493,14 @@ only expected to be called from user-facing components.
             if ( $ValueType eq 'Queue' ) {
                 @Values = map {
                     my $x = $QueueObj->Load($_) ? $QueueObj->Name : '#' . $_;
+                    '"'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $x, 'h' )
+                        . '"';
+                } @Values;
+            } elsif ( $ValueType eq 'Group' ) {
+                @Values = map {
+                    my $x = $GroupObj->Load($_) ? $GroupObj->Name : '#' . $_;
                     '"'
                         . $HTML::Mason::Commands::m->interp->apply_escapes(
                         $x, 'h' )
@@ -2613,6 +2631,7 @@ only expected to be called from user-facing components.
         my $HTML = '';
 
         my $CustomFieldObj = RT::CustomField->new( $self->CurrentUser );
+        my $GroupObj       = RT::Group->new( $self->CurrentUser );
         my $QueueObj       = RT::Queue->new( $self->CurrentUser );
 
         foreach my $Action ( $self->Actions ) {
@@ -2657,6 +2676,19 @@ only expected to be called from user-facing components.
                         $Action->Value, 'h' )
                         . '"';
                 }
+            } elsif ( $ValueType eq 'Group' ) {
+                $HTML .= ': ';
+                if ( $GroupObj->Load( $Action->Value ) ) {
+                    $HTML .= '"'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $GroupObj->Name, 'h' )
+                        . '"';
+                } else {
+                    $HTML .= '"#'
+                        . $HTML::Mason::Commands::m->interp->apply_escapes(
+                        $Action->Value, 'h' )
+                        . '"';
+                }
             } elsif ( $ValueType eq 'CustomField' ) {
                 $HTML .= ': ';
                 if ( $CustomFieldObj->Load( $Action->Value ) ) {
@@ -2680,11 +2712,10 @@ only expected to be called from user-facing components.
             if ( $Action->IsNotification ) {
                 if ( $Action->ActionType =~ /Group/ ) {
                     $HTML .= ' &rarr; ';
-                    if ( $CustomFieldObj->Load( $Action->Notify ) ) {
+                    if ( $GroupObj->Load( $Action->Notify ) ) {
                         $HTML .= '"'
                             . $HTML::Mason::Commands::m->interp
-                            ->apply_escapes( $CustomFieldObj->Name, 'h' )
-                            . '"';
+                            ->apply_escapes( $GroupObj->Name, 'h' ) . '"';
                     } else {
                         $HTML .= '"#'
                             . $HTML::Mason::Commands::m->interp
@@ -3046,6 +3077,35 @@ filter rule.
             'FilterRule' => $self->id,
             'Ticket'     => $args{'Ticket'}
         );
+    }
+
+=head2 MatchCount HOURS
+
+Return the number of times this rule has matched in the past I<HOURS> hours,
+or the number of times it has ever matched if I<HOURS> is zero.
+
+=cut
+
+    sub MatchCount {
+        my ( $self, $Hours ) = @_;
+        my $Collection = RT::FilterRuleMatches->new( $self->CurrentUser );
+        $Collection->UnLimit();
+        $Collection->Limit(
+            'FIELD'    => 'FilterRule',
+            'VALUE'    => $self->id,
+            'OPERATOR' => '='
+        );
+        if ($Hours) {
+            my $LimitDate = RT::Date->new( $self->CurrentUser );
+            $LimitDate->SetToNow();
+            $LimitDate->AddSeconds( -3600 * $Hours );
+            $Collection->Limit(
+                'FIELD'    => 'Created',
+                'VALUE'    => $LimitDate->ISO,
+                'OPERATOR' => '>'
+            );
+        }
+        return $Collection->CountAll;
     }
 
 =head2 MoveUp

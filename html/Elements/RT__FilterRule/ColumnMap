@@ -72,11 +72,20 @@ my $COLUMN_MAP = {
     'MatchCounts' => {
         'title' => 'Match Counts',                   # loc
         'value' => sub {
-            return 'TODO: writeme';
+            my $HTML = join(
+                '<br />',
+                map { $m->interp->apply_escapes( $_, 'h' ) } (
+                    $_[0]->loc('Past hour') . ': ' . $_[0]->MatchCount(1),
+                    $_[0]->loc('Past day') . ': ' . $_[0]->MatchCount(24),
+                    $_[0]->loc('Past week') . ': ' . $_[0]->MatchCount(168),
+                    $_[0]->loc('All time') . ': ' . $_[0]->MatchCount(0),
+                )
+            );
+            return \$HTML;
         },
     },
     'MoveFilterRule' => {
-        title => 'Move',                             # loc
+        title => 'Move',    # loc
         value => sub {
             my $id = $_[0]->id;
 
