@@ -447,35 +447,41 @@ sub ScripCommit {
     # Load all filter rule groups.
     #
     $FilterRuleGroups = RT::FilterRuleGroups->new( RT->SystemUser );
+    $FilterRuleGroups->UnLimit();
     $FilterRuleGroups->Limit(
         'FIELD'    => 'Disabled',
         'VALUE'    => 0,
         'OPERATOR' => '='
     );
+    $FilterRuleGroups->OrderByCols(
+        { FIELD => 'SortOrder', ORDER => 'ASC' } );
 
     # Check the filter rules in each filter rule group whose group
     # requirements are met, building up a list of actions to perform.
     #
     while ( $FilterRuleGroup = $FilterRuleGroups->Next ) {
-        next
-            if (
-            not $FilterRuleGroup->CheckGroupRequirements(
-                'RuleChecks'      => [],
-                'TriggerType'     => $TriggerType,
-                'From'            => $QueueFrom,
-                'To'              => $QueueTo,
-                'Ticket'          => $Action->TicketObj,
-                'IncludeDisabled' => 0
-            )
-            );
-        $FilterRuleGroup->CheckFilterRules(
+        my ( $Matched, $Message, $EventValue, $TargetValue );
+        ( $Matched, $Message, $EventValue, $TargetValue )
+            = $FilterRuleGroup->CheckGroupRequirements(
             'RuleChecks'      => $RuleChecks,
-            'Actions'         => $Actions,
+            'TriggerType'     => $TriggerType,
             'From'            => $QueueFrom,
             'To'              => $QueueTo,
             'Ticket'          => $Action->TicketObj,
             'IncludeDisabled' => 0
-        );
+            );
+        next if ( not $Matched );
+
+        ( $Matched, $Message, $EventValue, $TargetValue )
+            = $FilterRuleGroup->CheckFilterRules(
+            'RuleChecks'      => $RuleChecks,
+            'Actions'         => $Actions,
+            'TriggerType'     => $TriggerType,
+            'From'            => $QueueFrom,
+            'To'              => $QueueTo,
+            'Ticket'          => $Action->TicketObj,
+            'IncludeDisabled' => 0
+            );
     }
 
     # Keep track of the filter rule IDs we've performed actions on.
@@ -485,14 +491,14 @@ sub ScripCommit {
     # Perform the non-notification actions we have accumulated.
     #
     foreach ( grep { not $_->{'Action'}->IsNotification } @$Actions ) {
-        $_->{'Action'}->Perform( $_->{'FilterRule'} );
+        $_->{'Action'}->Perform( $_->{'FilterRule'}, $Action->TicketObj );
         $ActionedRules{ $_->{'FilterRule'}->id } = 1;
     }
 
     # Perform the notification actions we have accumulated.
     #
     foreach ( grep { $_->{'Action'}->IsNotification } @$Actions ) {
-        $_->{'Action'}->Perform( $_->{'FilterRule'} );
+        $_->{'Action'}->Perform( $_->{'FilterRule'}, $Action->TicketObj );
         $ActionedRules{ $_->{'FilterRule'}->id } = 1;
     }
 
@@ -1074,6 +1080,7 @@ which will be undefined if there was a problem.
 
         my $AllFilterRuleGroups
             = RT::FilterRuleGroups->new( $self->CurrentUser );
+        $AllFilterRuleGroups->UnLimit();
         $AllFilterRuleGroups->OrderByCols(
             { FIELD => 'SortOrder', ORDER => 'DESC' } );
         $AllFilterRuleGroups->GotoFirstItem();
@@ -2148,6 +2155,7 @@ which will be undefined if there was a problem.
         $RT::Handle->BeginTransaction();
 
         my $AllFilterRules = RT::FilterRules->new( $self->CurrentUser );
+        $AllFilterRules->UnLimit();
 
         $AllFilterRules->Limit(
             'FIELD'    => 'FilterRuleGroup',
@@ -2747,6 +2755,7 @@ this filter rule matched an event.
     sub MatchHistory {
         my ($self) = @_;
         my $Collection = RT::FilterRuleMatches->new( $self->CurrentUser );
+        $Collection->UnLimit();
         $Collection->Limit(
             'FIELD'    => 'FilterRule',
             'VALUE'    => $self->id,
@@ -3780,6 +3789,7 @@ ticket associated with the event being tested, caching it locally.
         my ( $self, $CustomFieldId ) = @_;
 
         return '' if ( not $self->{'Ticket'} );
+        return '' if ( not $CustomFieldId );
         my $CacheKey = 'TicketCustomFieldValue-' . $CustomFieldId;
 
         if ( not exists $self->{'Cache'}->{$CacheKey} ) {
@@ -4427,7 +4437,7 @@ This method returns nothing.
         return 1;
     }
 
-=head2 Perform FILTERRULE
+=head2 Perform FILTERRULE, TICKETOBJ
 
 Perform the action described by this object's parameters, returning (
 I<$ok>, I<$message> ), checking that the associated ticket has not recently
@@ -4436,7 +4446,9 @@ been touched by the same filter rule to avoid recursion.
 =cut
 
     sub Perform {
-        my ( $self, $FilterRule ) = @_;
+        my ( $self, $FilterRule, $TicketObj ) = @_;
+
+        $self->Set( 'Ticket' => $TicketObj );
 
         # Check that an action for this filter rule has not recently been
         # performed already.
@@ -4444,6 +4456,7 @@ been touched by the same filter rule to avoid recursion.
         my $AttributeName = 'FilterRules-' . $FilterRule->id;
         my $Attribute     = $self->Ticket->FirstAttribute($AttributeName);
         my $Epoch         = ( $Attribute ? $Attribute->Content : 0 ) || 0;
+
         if ( $Epoch > ( time - 60 ) ) {
             RT->Logger->warning(
                       'RT::Extension::FilterRule: Skipping action for rule #'
@@ -4986,6 +4999,9 @@ Return ( I<$ok>, I<$message> ) after performing the "NotifyEmail" action.
 
         return ( $NTrans, $Nmsg ) if ( not $NTrans );
 
+        # Now delete the transaction.
+        $NTransObj->Delete if ($NTransObj);
+
         return ( 1, $self->loc('Email sent') );
     }
 
@@ -5029,6 +5045,9 @@ Return ( I<$ok>, I<$message> ) after performing the "NotifyGroup" action.
         );
 
         return ( $NTrans, $Nmsg ) if ( not $NTrans );
+
+        # Now delete the transaction.
+        $NTransObj->Delete if ($NTransObj);
 
         return ( 1, $self->loc('Email sent') );
     }
