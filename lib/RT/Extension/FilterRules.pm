@@ -331,7 +331,11 @@ too, but will not be able to modify them.
 
 =head2 Creating filter rules
 
-(TODO)
+(TODO: tutorial on creating filter rules)
+
+=head2 Testing filter rules
+
+(TODO: tutorial on testing filter rules)
 
 =head1 AUTHOR
 
