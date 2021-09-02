@@ -24,6 +24,17 @@ if ( $request_path =~ m|^/Tools/FilterRules.html| ) {
         'description' => loc('Manage ticket filtering rules'),
         'path'        => '/Tools/FilterRules.html'
     );
+    PageMenu()->child(
+        'FilterRules-Test',
+        'title'       => loc('Test'),
+        'description' => loc('Test ticket filtering rules'),
+        'path'        => '/Tools/FilterRules.html?Test=1'
+            . (
+            ( ( $DECODED_ARGS->{'id'} || '' ) =~ /^(\d+)$/ )
+            ? '&id=' . $1
+            : ''
+            )
+    );
 }
 
 if ( $session{'CurrentUser'}
@@ -46,6 +57,11 @@ if ( $session{'CurrentUser'}
         'create',
         'title' => loc('Create'),
         'path'  => '/Admin/FilterRules/Modify.html?Create=1'
+    );
+    $AdminMenu->child(
+        'test',
+        'title' => loc('Test'),
+        'path'  => '/Admin/FilterRules/Test.html'
     );
 
     if ( $request_path =~ m{^/Admin/FilterRules} ) {
@@ -120,7 +136,18 @@ if ( $session{'CurrentUser'}
                     title  => loc('History'),
                     'path' => '/Admin/FilterRules/History.html?id=' . $id
                 );
+                $Menu->child(
+                    'test',
+                    title  => loc('Test'),
+                    'path' => '/Admin/FilterRules/Test.html?id=' . $id
+                );
             }
+        } else {
+            $Menu->child(
+                'test',
+                title  => loc('Test'),
+                'path' => '/Admin/FilterRules/Test.html'
+            );
         }
     }
 }

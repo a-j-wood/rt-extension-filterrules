@@ -3,38 +3,69 @@ Page to manage the filter rules that the current user has access to.
 </%doc>
 \
 <%ARGS>
+$Test => undef
 $id => undef
 $Rule => undef
 $Create => undef
 </%ARGS>
 \
 <%INIT>
-if ($id) {
+if ($Test) {
+    $m->comp( 'FilterRules.html:Test', %ARGS );
+} elsif ($id) {
     $m->comp( 'FilterRules.html:ShowRules', %ARGS );
 } elsif ( not $id ) {
     $m->comp( 'FilterRules.html:ListRuleGroups', %ARGS );
 }
 </%INIT>
 \
-<%method ListRuleGroups>
+<%method Test>
 <%doc>
-List the filter rule groups visible to the current user.
+Show the testing form.
 </%doc>
 \
 <%INIT>
-my $Title   = loc('Filter rule groups');
-my @Results = ();
-
 my $Collection = RT::FilterRuleGroups->new( $session{'CurrentUser'} );
+$m->comp( 'FilterRules.html:GetFilterRuleGroups',
+    'Collection' => $Collection );
+my $Title = loc('Test filter rules');
+</%INIT>
+\
+<& /Elements/Header, Title => $Title &>
+<& /Elements/Tabs &>
+\
+% if ($Collection->Count == 0) {
+<p>
+<em><&|/l&>You do not have access to any filter rule groups.</&></em>
+</p>
+% } else {
+<& /Elements/FilterRules/Test,
+    %ARGS,
+    FilterRuleGroups => $Collection,
+    PageLink => RT->Config->Get('WebPath') . '/Tools/FilterRules.html',
+&>
+% }
+</%method>
+\
+<%method GetFilterRuleGroups>
+<%doc>
+Given an RT::FilterRuleGroups collection object, update it to limit to just
+the filter rule groups the current user can see.
+</%doc>
+\
+<%ARGS>
+$Collection => undef
+</%ARGS>
+\
+<%INIT>
+return if ( not $Collection );
+
 $Collection->UnLimit;
 $Collection->Limit(
     'FIELD'    => 'Disabled',
     'VALUE'    => 0,
     'OPERATOR' => '='
 );
-
-# Build a collection containing only the filter rule groups the current user
-# can see.
 
 my $IsSuperUser = $session{'CurrentUser'}
     ->HasRight( Object => $RT::System, Right => 'SuperUser' );
@@ -61,6 +92,23 @@ $Collection->Limit(
     'OPERATOR' => '='
 ) if ( scalar @idlist < 1 );
 
+return;
+</%INIT>
+</%method>
+\
+<%method ListRuleGroups>
+<%doc>
+List the filter rule groups visible to the current user.
+</%doc>
+\
+<%INIT>
+my $Title   = loc('Filter rule groups');
+my @Results = ();
+
+my $Collection = RT::FilterRuleGroups->new( $session{'CurrentUser'} );
+$m->comp( 'FilterRules.html:GetFilterRuleGroups',
+    'Collection' => $Collection );
+
 # Show the rules in the only group, if there is only one.
 if ( $Collection->Count() == 1 ) {
     $m->comp( 'FilterRules.html:ShowRules', %ARGS,
@@ -83,7 +131,6 @@ my $Format
 <em><&|/l&>You do not have access to any filter rule groups.</&></em>
 </p>
 % } else {
-<p>TODO: Filter testing form - select ticket, trigger type, from/to queues, show matches</p>
 <& /Elements/CollectionList,
     OrderBy => 'SortOrder',
     Order => 'ASC',
@@ -179,7 +226,6 @@ if ( $ARGS{'Rule'} && not $ARGS{'Create'} ) {
 </p>
 </form>
 %     }
-<p>TODO: Filter testing form - select ticket, trigger type, from/to queues, show matches</p>
 <& /Elements/FilterRules/ShowRules,
     %ARGS,
     FilterRuleGroup => $FilterRuleGroup,
