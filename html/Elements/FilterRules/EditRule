@@ -72,6 +72,14 @@ foreach my $QueueCollection (
 %     if ( ( not defined $FilterRule )
 %     && ( not $Create ) );
 
+% if ($FilterRuleGroup->Disabled) {
+<& /Elements/ListActions, actions => 
+    [
+    loc('The filter rule group containing this rule is currently disabled.'),
+    loc('This rule will not be processed until the filter rule group as a whole is enabled.'),
+    ] &>
+% }
+
 <style type="text/css">
 tr[conditionrow] td, tr[actionrow] td { border-bottom: solid #888 1px; padding-top: 0.5em; padding-bottom: 0.5em; }
 </style>

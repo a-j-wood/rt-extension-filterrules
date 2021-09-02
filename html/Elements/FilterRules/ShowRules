@@ -58,6 +58,13 @@ $Format .= ",'__MoveFilterRule__'" if ($CanModify);
 <p><em><&|/l&>No filter rules found.</&></em></p>
 %     }
 % } else {
+%     if ($FilterRuleGroup->Disabled) {
+<& /Elements/ListActions, actions => 
+    [
+    loc('This filter rule group is currently disabled.'),
+    loc('None of the rules below will be active until the filter rule group is enabled.'),
+    ] &>
+%     }
 <& /Elements/CollectionList,
     %ARGS,
     OrderBy => 'SortOrder',
