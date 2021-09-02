@@ -1525,6 +1525,7 @@ entries, and for the event structure.
             = ( 0, '', '', '' );
 
         while ( $Item = $Collection->Next ) {
+            next if ( $Item->TriggerType ne $args{'TriggerType'} );
             my ($ItemMatch,      $ItemMessage,
                 $ItemEventValue, $ItemTargetValue
                )
@@ -1617,6 +1618,7 @@ entries, and for the event structure.
             = ( 0, '', '', '' );
 
         while ( $Item = $Collection->Next ) {
+            next if ( $Item->TriggerType ne $args{'TriggerType'} );
             my ($ItemMatch,      $ItemMessage,
                 $ItemEventValue, $ItemTargetValue
                )
@@ -3611,8 +3613,6 @@ in the condition.
                     )
             };
         }
-
-        # TODO: check condition TriggerTypes against TriggerType
 
         my ( $Matched, $Message, $EventValue ) = ( 0, '', '' );
 
