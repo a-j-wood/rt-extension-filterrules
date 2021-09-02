@@ -3120,9 +3120,11 @@ appropriate.  Returns ( I<$ok>, I<$message> ).
                 return ( 0, $self->loc( 'Internal error: [_1]', $txn_msg ) );
             }
         } elsif ( ( $args{'Field'} || '' ) ne 'SortOrder' ) {
-            my ($RecordNew, $RecordOld) = ($args{'Value'}, $OldValue);
-            if (($args{'Field'}||'') =~ /^(Conflicts|Requirements|Actions)$/) {
-                ($RecordNew, $RecordOld) = ('(new)', '(old)');
+            my ( $RecordNew, $RecordOld ) = ( $args{'Value'}, $OldValue );
+            if ( ( $args{'Field'} || '' )
+                =~ /^(Conflicts|Requirements|Actions)$/ )
+            {
+                ( $RecordNew, $RecordOld ) = ( '(new)', '(old)' );
             }
             my ( $txn_id, $txn_msg, $txn ) = $self->_NewTransaction(
                 'Type'     => 'Set',
@@ -4335,7 +4337,8 @@ which custom field to set the value of)
 =item B<Value>
 
 The value associated with this action, if applicable, such as the queue to
-move to, or the contents of an email to send
+move to, or the contents of an email to send, or the email address or group
+ID to add as a watcher
 
 =item B<Notify>
 
@@ -4392,9 +4395,8 @@ been touched by the same filter rule to avoid recursion.
         # performed already.
         #
         my $AttributeName = 'FilterRules-' . $FilterRule->id;
-        my $Attribute
-            = $self->{'Cache'}->{'Ticket'}->FirstAttribute($AttributeName);
-        my $Epoch = ( $Attribute ? $Attribute->Content : 0 ) || 0;
+        my $Attribute     = $self->Ticket->FirstAttribute($AttributeName);
+        my $Epoch         = ( $Attribute ? $Attribute->Content : 0 ) || 0;
         if ( $Epoch > ( time - 60 ) ) {
             RT->Logger->warning(
                       'RT::Extension::FilterRule: Skipping action for rule #'
@@ -4507,6 +4509,14 @@ action.
 
     sub Notify { return $_[0]->{'Notify'}; }
 
+=head2 Ticket
+
+Return the ticket object that this action is being performed on.
+
+=cut
+
+    sub Ticket { return $_[0]->{'Ticket'}; }
+
 =head2 _None
 
 Return ( I<$ok>, I<$message> ) after performing the "None" action.
@@ -4522,336 +4532,458 @@ Return ( I<$ok>, I<$message> ) after performing the "None" action.
 
 Return ( I<$ok>, I<$message> ) after performing the "SubjectPrefix" action.
 
-(TODO)
-
 =cut
 
     sub _SubjectPrefix {
         my $self = shift;
-        my %args = @_;
+        my ( $Prefix, $Subject, $NewSubject );
 
-        # TODO: writeme (action: SubjectPrefix)
-        return 0;
+        $Prefix = $self->Value;
+        $Prefix = '' if ( not defined $Prefix );
+        $Prefix =~ s/^\s+//;
+        return ( 1, $self->loc('No subject prefix to add') )
+            if ( $Prefix !~ /\S/ );
+
+        $Subject = $self->Ticket->Subject;
+        $Subject = '' if ( not defined $Subject );
+        $Subject =~ s/^\s+//;
+
+        $NewSubject = $Prefix;
+        $NewSubject .= ' ' . $Subject if ( $Subject =~ /\S/ );
+
+        return $self->Ticket->SetSubject($NewSubject);
     }
 
 =head2 _SubjectSuffix
 
 Return ( I<$ok>, I<$message> ) after performing the "SubjectSuffix" action.
 
-(TODO)
-
 =cut
 
     sub _SubjectSuffix {
         my $self = shift;
-        my %args = @_;
+        my ( $Suffix, $Subject, $NewSubject );
 
-        # TODO: writeme (action: SubjectSuffix)
-        return 0;
+        $Suffix = $self->Value;
+        $Suffix = '' if ( not defined $Suffix );
+        $Suffix =~ s/\s+$//;
+        return ( 1, $self->loc('No subject suffix to add') )
+            if ( $Suffix !~ /\S/ );
+
+        $Subject = $self->Ticket->Subject;
+        $Subject = '' if ( not defined $Subject );
+        $Subject =~ s/\s+$//;
+
+        $NewSubject = '';
+        $NewSubject = $Subject . ' ' if ( $Subject =~ /\S/ );
+        $NewSubject .= $Suffix;
+
+        return $self->Ticket->SetSubject($NewSubject);
     }
 
 =head2 _SubjectRemoveMatch
 
 Return ( I<$ok>, I<$message> ) after performing the "SubjectRemoveMatch" action.
 
-(TODO)
-
 =cut
 
     sub _SubjectRemoveMatch {
         my $self = shift;
-        my %args = @_;
+        my ( $Match, $Subject, $NewSubject );
 
-        # TODO: writeme (action: SubjectRemoveMatch)
-        return 0;
+        $Match = $self->Value;
+        $Match = '' if ( not defined $Match );
+        return ( 1, $self->loc('No string to match') )
+            if ( $Match eq '' );
+
+        $Subject = $self->Ticket->Subject;
+        $Subject = '' if ( not defined $Subject );
+
+        $NewSubject = $Subject;
+        $NewSubject =~ s/\Q$Match\E//i;
+
+        return ( 1, $self->loc('Subject unchanged - match text not found') )
+            if ( $NewSubject eq $Subject );
+
+        return $self->Ticket->SetSubject($NewSubject);
     }
 
 =head2 _SubjectSet
 
 Return ( I<$ok>, I<$message> ) after performing the "SubjectSet" action.
 
-(TODO)
-
 =cut
 
     sub _SubjectSet {
         my $self = shift;
-        my %args = @_;
+        my ( $NewSubject, $Subject );
 
-        # TODO: writeme (action: SubjectSet)
-        return 0;
+        $NewSubject = $self->Value;
+        $NewSubject = '' if ( not defined $NewSubject );
+
+        $Subject = $self->Ticket->Subject;
+        $Subject = '' if ( not defined $Subject );
+
+        return ( 1, $self->loc('Subject unchanged') )
+            if ( $NewSubject eq $Subject );
+
+        return $self->Ticket->SetSubject($NewSubject);
     }
 
 =head2 _PrioritySet
 
 Return ( I<$ok>, I<$message> ) after performing the "PrioritySet" action.
 
-(TODO)
-
 =cut
 
     sub _PrioritySet {
         my $self = shift;
-        my %args = @_;
+        my ( $NewPriority, $Priority );
 
-        # TODO: writeme (action: PrioritySet)
-        return 0;
+        $NewPriority = $self->Value || 0;
+
+        $Priority = $self->Ticket->Priority || 0;
+
+        return ( 1, $self->loc('Priority unchanged') )
+            if ( $NewPriority eq $Priority );
+
+        return $self->Ticket->SetPriority($NewPriority);
     }
 
 =head2 _PriorityAdd
 
 Return ( I<$ok>, I<$message> ) after performing the "PriorityAdd" action.
 
-(TODO)
-
 =cut
 
     sub _PriorityAdd {
         my $self = shift;
-        my %args = @_;
+        my ( $Offset, $NewPriority, $Priority );
 
-        # TODO: writeme (action: PriorityAdd)
-        return 0;
+        $Offset   = $self->Value            || 0;
+        $Priority = $self->Ticket->Priority || 0;
+        $NewPriority = $Priority + $Offset;
+
+        return ( 1, $self->loc('Priority unchanged') )
+            if ( $NewPriority eq $Priority );
+
+        return $self->Ticket->SetPriority($NewPriority);
     }
 
 =head2 _PrioritySubtract
 
 Return ( I<$ok>, I<$message> ) after performing the "PrioritySubtract" action.
 
-(TODO)
-
 =cut
 
     sub _PrioritySubtract {
         my $self = shift;
-        my %args = @_;
+        my ( $Offset, $NewPriority, $Priority );
 
-        # TODO: writeme (action: PrioritySubtract)
-        return 0;
+        $Offset   = $self->Value            || 0;
+        $Priority = $self->Ticket->Priority || 0;
+        $NewPriority = $Priority - $Offset;
+
+        return ( 1, $self->loc('Priority unchanged') )
+            if ( $NewPriority eq $Priority );
+
+        return $self->Ticket->SetPriority($NewPriority);
     }
 
 =head2 _StatusSet
 
 Return ( I<$ok>, I<$message> ) after performing the "StatusSet" action.
 
-(TODO)
-
 =cut
 
     sub _StatusSet {
         my $self = shift;
-        my %args = @_;
+        my ( $NewStatus, $Status );
 
-        # TODO: writeme (action: StatusSet)
-        return 0;
+        $NewStatus = $self->Value;
+        $NewStatus = '' if ( not defined $NewStatus );
+
+        $Status = $self->Ticket->Status;
+        $Status = '' if ( not defined $Status );
+
+        return ( 1, $self->loc('Status unchanged') )
+            if ( $NewStatus eq $Status );
+
+        return $self->Ticket->SetStatus($NewStatus);
     }
 
 =head2 _QueueSet
 
 Return ( I<$ok>, I<$message> ) after performing the "QueueSet" action.
 
-(TODO)
-
 =cut
 
     sub _QueueSet {
         my $self = shift;
-        my %args = @_;
+        my ( $NewQueue, $Queue );
 
-        # TODO: writeme (action: QueueSet)
-        return 0;
+        $NewQueue = $self->Value         || 0;
+        $Queue    = $self->Ticket->Queue || 0;
+
+        return ( 1, $self->loc('Queue unchanged') )
+            if ( $NewQueue eq $Queue );
+
+        return $self->Ticket->SetQueue($NewQueue);
     }
 
 =head2 _CustomFieldSet
 
 Return ( I<$ok>, I<$message> ) after performing the "CustomFieldSet" action.
 
-(TODO)
-
 =cut
 
     sub _CustomFieldSet {
         my $self = shift;
-        my %args = @_;
+        my ( $NewValue, $CurrentValue );
 
-        # TODO: writeme (action: CustomFieldSet)
-        return 0;
+        $NewValue = $self->Value;
+        $NewValue = '' if ( not defined $NewValue );
+
+        $CurrentValue
+            = $self->Ticket->FirstCustomFieldValue( $self->CustomField );
+        $CurrentValue = '' if ( not defined $CurrentValue );
+
+        return ( 1, $self->loc('Custom field unchanged') )
+            if ( $NewValue eq $CurrentValue );
+
+        return $self->Ticket->AddCustomFieldValue(
+            'Field' => $self->CustomField,
+            'Value' => $NewValue
+        );
     }
 
 =head2 _RequestorAdd
 
 Return ( I<$ok>, I<$message> ) after performing the "RequestorAdd" action.
 
-(TODO)
-
 =cut
 
     sub _RequestorAdd {
         my $self = shift;
-        my %args = @_;
-
-        # TODO: writeme (action: RequestorAdd)
-        return 0;
+        return $self->Ticket->AddWatcher(
+            'Type'  => 'Requestor',
+            'Email' => $self->Value
+        );
     }
 
 =head2 _RequestorRemove
 
 Return ( I<$ok>, I<$message> ) after performing the "RequestorRemove" action.
 
-(TODO)
-
 =cut
 
     sub _RequestorRemove {
         my $self = shift;
-        my %args = @_;
-
-        # TODO: writeme (action: RequestorRemove)
-        return 0;
+        return $self->Ticket->DeleteWatcher(
+            'Type'  => 'Requestor',
+            'Email' => $self->Value
+        );
     }
 
 =head2 _CcAdd
 
 Return ( I<$ok>, I<$message> ) after performing the "CcAdd" action.
 
-(TODO)
-
 =cut
 
     sub _CcAdd {
         my $self = shift;
-        my %args = @_;
-
-        # TODO: writeme (action: CcAdd)
-        return 0;
+        return $self->Ticket->AddWatcher(
+            'Type'  => 'Cc',
+            'Email' => $self->Value
+        );
     }
 
 =head2 _CcAddGroup
 
 Return ( I<$ok>, I<$message> ) after performing the "CcAddGroup" action.
 
-(TODO)
-
 =cut
 
     sub _CcAddGroup {
         my $self = shift;
-        my %args = @_;
-
-        # TODO: writeme (action: CcAddGroup)
-        return 0;
+        return $self->Ticket->AddWatcher(
+            'Type'        => 'Cc',
+            'PrincipalId' => $self->Value
+        );
     }
 
 =head2 _CcRemove
 
 Return ( I<$ok>, I<$message> ) after performing the "CcRemove" action.
 
-(TODO)
-
 =cut
 
     sub _CcRemove {
         my $self = shift;
-        my %args = @_;
-
-        # TODO: writeme (action: CcRemove)
-        return 0;
+        return $self->Ticket->DeleteWatcher(
+            'Type'  => 'Cc',
+            'Email' => $self->Value
+        );
     }
 
 =head2 _AdminCcAdd
 
 Return ( I<$ok>, I<$message> ) after performing the "AdminCcAdd" action.
 
-(TODO)
-
 =cut
 
     sub _AdminCcAdd {
         my $self = shift;
-        my %args = @_;
-
-        # TODO: writeme (action: AdminCcAdd)
-        return 0;
+        return $self->Ticket->AddWatcher(
+            'Type'  => 'AdminCc',
+            'Email' => $self->Value
+        );
     }
 
 =head2 _AdminCcAddGroup
 
 Return ( I<$ok>, I<$message> ) after performing the "AdminCcAddGroup" action.
 
-(TODO)
-
 =cut
 
     sub _AdminCcAddGroup {
         my $self = shift;
-        my %args = @_;
-
-        # TODO: writeme (action: AdminCcAddGroup)
-        return 0;
+        return $self->Ticket->AddWatcher(
+            'Type'        => 'AdminCc',
+            'PrincipalId' => $self->Value
+        );
     }
 
 =head2 _AdminCcRemove
 
 Return ( I<$ok>, I<$message> ) after performing the "AdminCcRemove" action.
 
-(TODO)
-
 =cut
 
     sub _AdminCcRemove {
         my $self = shift;
-        my %args = @_;
-
-        # TODO: writeme (action: AdminCcRemove)
-        return 0;
+        return $self->Ticket->DeleteWatcher(
+            'Type'  => 'AdminCc',
+            'Email' => $self->Value
+        );
     }
 
 =head2 _Reply
 
 Return ( I<$ok>, I<$message> ) after performing the "Reply" action.
 
-(TODO)
-
 =cut
 
     sub _Reply {
         my $self = shift;
-        my %args = @_;
 
-        # TODO: writeme (action: Reply)
-        return 0;
+        # Bodged together from RT 4.2.16's
+        # HTML::Mason::Commands::CreateTicket() and ProcessUpdateMessage()
+        #
+
+        my $MIMEObj = HTML::Mason::Commands::MakeMIMEEntity(
+            'Subject'   => $self->Ticket->Subject,
+            'Body'      => $self->Value,
+            'Type'      => 'text/html',
+            'Interface' => 'Web'
+        );
+        my $NewMessageId
+            = RT::Interface::Email::GenMessageId( 'Ticket' => $self->Ticket );
+        $MIMEObj->head->replace(
+            'Message-ID' => Encode::encode( 'UTF-8', $NewMessageId ) );
+        my ( $NTrans, $Nmsg, $NTransObj )
+            = $self->Ticket->Correspond( 'MIMEObj' => $MIMEObj );
+
+        return ( $NTrans, $Nmsg ) if ( not $NTrans );
+
+        return ( 1, $self->loc('Reply sent') );
     }
 
 =head2 _NotifyEmail
 
 Return ( I<$ok>, I<$message> ) after performing the "NotifyEmail" action.
 
-(TODO)
-
 =cut
 
     sub _NotifyEmail {
         my $self = shift;
-        my %args = @_;
 
-        # TODO: writeme (action: NotifyEmail)
-        return 0;
+        # As _Reply() but we comment with a BCC instead of corresponding,
+        # then delete our transaction so it's not in the history.
+
+        # Normalise a comma or semicolon separated list of email addresses
+        # into comma-and-space separated.
+        #
+        my $RecipientList = $self->Notify || '';
+        $RecipientList
+            = join( ', ', grep {/\S\@\S/} split qr/[,;]\s*/, $RecipientList );
+
+        return ( 1, $self->loc('No recipients') )
+            if ( $RecipientList !~ /\@/ );
+
+        my $MIMEObj = HTML::Mason::Commands::MakeMIMEEntity(
+            'Subject'   => $self->Ticket->Subject,
+            'Body'      => $self->Value,
+            'Type'      => 'text/html',
+            'Interface' => 'Web'
+        );
+        my $NewMessageId
+            = RT::Interface::Email::GenMessageId( 'Ticket' => $self->Ticket );
+        $MIMEObj->head->replace(
+            'Message-ID' => Encode::encode( 'UTF-8', $NewMessageId ) );
+        my ( $NTrans, $Nmsg, $NTransObj ) = $self->Ticket->Comment(
+            'MIMEObj' => $MIMEObj,
+            'BccMessageTo', $RecipientList
+        );
+
+        return ( $NTrans, $Nmsg ) if ( not $NTrans );
+
+        return ( 1, $self->loc('Email sent') );
     }
 
 =head2 _NotifyGroup
 
 Return ( I<$ok>, I<$message> ) after performing the "NotifyGroup" action.
 
-(TODO)
-
 =cut
 
     sub _NotifyGroup {
         my $self = shift;
-        my %args = @_;
 
-        # TODO: writeme (action: NotifyGroup)
-        return 0;
+        # As _NotifyEmail() but we load a user-defined group and enumerate
+        # its members to make a list of email addresses to BCC.
+
+        my $GroupObj = RT::Group->new( RT->SystemUser );
+        return ( 0, loc('Failed to load recipient group') )
+            if ( not $GroupObj->LoadUserDefinedGroup( $self->Notify ) );
+        return ( 0, loc('Failed to load recipient group') )
+            if ( not $GroupObj->id );
+
+        my $RecipientList = join( ', ',
+            grep {/\S\@\S/} $GroupObj->MemberEmailAddressesAsString() );
+
+        return ( 1, $self->loc('No recipients') )
+            if ( $RecipientList !~ /\@/ );
+
+        my $MIMEObj = HTML::Mason::Commands::MakeMIMEEntity(
+            'Subject'   => $self->Ticket->Subject,
+            'Body'      => $self->Value,
+            'Type'      => 'text/html',
+            'Interface' => 'Web'
+        );
+        my $NewMessageId
+            = RT::Interface::Email::GenMessageId( 'Ticket' => $self->Ticket );
+        $MIMEObj->head->replace(
+            'Message-ID' => Encode::encode( 'UTF-8', $NewMessageId ) );
+        my ( $NTrans, $Nmsg, $NTransObj ) = $self->Ticket->Comment(
+            'MIMEObj' => $MIMEObj,
+            'BccMessageTo', $RecipientList
+        );
+
+        return ( $NTrans, $Nmsg ) if ( not $NTrans );
+
+        return ( 1, $self->loc('Email sent') );
     }
 
 }
