@@ -249,8 +249,8 @@ rule will I<not> match.  For this example, leave this empty.
 =item 4.
 
 Choose the requirement conditions.  I<All> of these conditions must be met
-for the rule to match.  Click the B<Add condition> button, choose a I<"In
-queue">, and select the I<"General"> queue.
+for the rule to match.  Click on the B<Add condition> button, choose
+I<"In queue">, and select the I<"General"> queue.
 
 For each condition, although all of the conditions must be met, you can
 specify multiple values for each condition using the B<Add value> button for
@@ -331,7 +331,122 @@ too, but will not be able to modify them.
 
 =head2 Creating filter rules
 
-(TODO: tutorial on creating filter rules)
+RT super users can edit filter rules by starting from I<Admin> - I<Filter
+rule groups> - I<Select>, choosing a filter rule group, and then choosing
+I<Filters> from the page menu at the top.
+
+Members of the groups you delegated access to in the steps above can edit
+the filter rules by going to I<Tools> - I<Filter rules>.  If they have
+access to more than one filter rule group, they can then choose which one's
+rules to edit from the list provided.
+
+Click on the C<Create new filter rule> button to create a new filter rule.
+
+=over
+
+=item 1.
+
+Give the filter rule a name, such as
+I<"Escalate desktop wallpaper requests">.
+
+=item 2.
+
+Set the trigger type, as with the requirement rule above.  For this example,
+select I<"On ticket creation">.
+
+=item 3.
+
+Choose the conflict conditions, as with the requirement rule above.  For
+this example, click on the B<Add condition> button, choose I<"Subject or
+message body contains">, and type C<paste> into the box next to it.
+
+=item 4.
+
+Choose the requirement conditions, as with the requirement rule above.  For
+this example:
+
+=over
+
+=item *
+
+Click on the B<Add condition> button, choose a I<"In queue">, and select the
+I<"General"> queue.
+
+=item *
+
+Click on the B<Add condition> button again, choose  I<"Subject or
+message body contains">, and type C<wallpaper> into the box next to it.
+
+=item *
+
+Click on the B<Add value> button underneath the box containing C<wallpaper>
+and type C<background> into the box that appears.
+
+=item *
+
+Click on the B<Add condition> button again, choose  I<"Subject or
+message body contains">, and type C<desktop> into the box next to it.
+
+=back 
+
+=item 5.
+
+
+Choose the actions to perform when this rule is matched.  For this example,
+click on the C<Add action> button, choose I<"Move to queue">, and select the
+I<"Technical"> queue.
+
+=item 6.
+
+Choose whether to stop processing any further rules in this filter rule
+group when this particular filter rule is matched.
+
+By default, this is set to I<"No">, which means that even if this rule
+matches, the rules after it will still be checked too.
+
+For this example, leave it set to I<"No">.
+
+=back
+
+Click on the B<Create> button to create the new filter rule.  You will see a
+message something like C<Filter rule 15 created>.  Click on the B<Back>
+button below that message to return to the list of filter rules.
+
+Your new rule will be shown in the list.  The conflicts, requirements, and
+actions are detailed in the list.  You will see that this new rule:
+
+=over
+
+=item *
+
+Will never match, if the subject or message body contains the word C<paste>.
+
+=item *
+
+Will match otherwise, if the ticket was created in the I<General> queue, and
+its subject or message body contains either of the words C<wallpaper> or
+C<background>, I<and> its subject or message body contains the word
+C<desktop>.
+
+=item *
+
+When the rule matches, it will move the ticket to the I<Technical> queue.
+
+=back
+
+So for example, if someone creates a ticket in the I<General> queue
+mentioning C<desktop wallpaper> or C<desktop background>, the ticket will be
+moved to the I<Technical> queue, but if they mention C<desktop wallpaper
+paste>, the ticket will not be moved because of the conflict condition about
+the word C<paste>.
+
+Usually you would not actually move tickets based on keyword matches, this
+is just an example - though you may want to send notification emails when
+certain words appear, or set custom field values or priorities, for
+instance.
+
+Filter rules are processed in order.  In the list of filter rules, use the
+I<[Up]> and I<[Down]> links to move filter rules up and down.
 
 =head2 Testing filter rules
 
