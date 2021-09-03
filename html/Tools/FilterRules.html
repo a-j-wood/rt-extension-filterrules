@@ -34,6 +34,13 @@ my $Title = loc('Test filter rules');
 <& /Elements/Header, Title => $Title &>
 <& /Elements/Tabs &>
 \
+<form action="FilterRules.html" method="get">
+% if ($id) {
+<input type="hidden" name="id" value="<% $id %>" />
+% }
+<p><input type="submit" value="&larr; <&|/l&>Back</&>" /></p>
+</form>
+\
 % if ($Collection->Count == 0) {
 <p>
 <em><&|/l&>You do not have access to any filter rule groups.</&></em>

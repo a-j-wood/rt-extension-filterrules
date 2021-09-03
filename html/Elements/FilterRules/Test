@@ -1,1 +1,22 @@
+<%doc>
+Allow the rules in one or all filter rule groups visible to the current user
+to be tested.
+</%doc>
+\
+<%ARGS>
+$id       => undef
+$PageLink => undef
+</%ARGS>
+\
+<%INIT>
+my $Collection = RT::FilterRuleGroups->new( $session{'CurrentUser'} );
+$m->comp( '/Tools/FilterRules.html:GetFilterRuleGroups',
+    'Collection' => $Collection );
+</%INIT>
+\
+<form action="<%$PageLink%>" method="post">
+<input type="hidden" name="Test" value="1" />
+
 <p>TODO: Filter testing form - select ticket, trigger type, from/to queues, show matches</p>
+
+</form>
