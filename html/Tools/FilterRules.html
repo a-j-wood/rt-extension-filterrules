@@ -24,15 +24,24 @@ if ($Test) {
 Show the testing form.
 </%doc>
 \
+<%ARGS>
+$id => undef
+$TestGroup => undef
+</%ARGS>
+\
 <%INIT>
 my $Collection = RT::FilterRuleGroups->new( $session{'CurrentUser'} );
 $m->comp( 'FilterRules.html:GetFilterRuleGroups',
     'Collection' => $Collection );
 my $Title = loc('Test filter rules');
+
+$TestGroup = $id || 0 if (not defined $TestGroup);
 </%INIT>
 \
 <& /Elements/Header, Title => $Title &>
 <& /Elements/Tabs &>
+\
+<p></p>
 \
 <form action="FilterRules.html" method="get">
 % if ($id) {
@@ -133,6 +142,8 @@ my $Format
 <& /Elements/Tabs &>
 <& /Elements/ListActions, actions => \@Results &>
 \
+<p></p>
+\
 % if ($Collection->Count == 0) {
 <p>
 <em><&|/l&>You do not have access to any filter rule groups.</&></em>
@@ -214,6 +225,8 @@ if ( $ARGS{'Rule'} && not $ARGS{'Create'} ) {
 <& /Elements/Header, Title => $Title  &>
 <& /Elements/Tabs &>
 <& /Elements/ListActions, actions => \@Results &>
+\
+<p></p>
 
 % if ($ARGS{'Rule'} || $ARGS{'Create'}) {
 <& /Elements/FilterRules/EditRule,

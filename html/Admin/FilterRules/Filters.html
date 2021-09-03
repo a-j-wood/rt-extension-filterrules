@@ -65,6 +65,8 @@ if ( $ARGS{'Rule'} && not $ARGS{'Create'} ) {
 <& /Elements/Tabs &>
 <& /Elements/ListActions, actions => \@Results &>
 
+<p></p>
+
 % if ($ARGS{'Rule'} || $ARGS{'Create'}) {
 <& /Elements/FilterRules/EditRule,
     %ARGS,

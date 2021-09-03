@@ -115,6 +115,7 @@ MaybeRedirectForResults(
 
 <form action="<%RT->Config->Get('WebPath')%>/Admin/FilterRules/Modify.html" method="post">
 <input type="hidden" class="hidden" name="id" value="<% $Create ? 'new': $Object->id %>" />
+<p></p>
 <table>
 <tr>\
 <th style="text-align:right;vertical-align:top;"><&|/l&>Name</&>:</th>\
@@ -123,7 +124,7 @@ MaybeRedirectForResults(
 % if (not $Create) {
 <tr>\
 <th style="text-align:right;vertical-align:top;"><&|/l&>Queues to allow in match rules</&>:</th>\
-<td><& /Elements/SelectObject, ObjectType => 'Queue', CheckRight => undef, ShowAll => 1, Name => 'AddCanMatchQueues' &>\
+<td><& /Elements/SelectObject, ObjectType => 'Queue', CheckRight => 'SeeQueue', ShowAll => 1, Name => 'AddCanMatchQueues' &>\
  <input type="submit" value="<&|/l&>Add queue</&>" />\
 %     my ($Collection, $Count);
 %     $Collection = $Object->CanMatchQueuesObj;
@@ -139,7 +140,7 @@ MaybeRedirectForResults(
 </tr>
 <tr>\
 <th style="text-align:right;vertical-align:top;"><&|/l&>Queues to allow as transfer destinations</&>:</th>\
-<td><& /Elements/SelectObject, ObjectType => 'Queue', CheckRight => undef, ShowAll => 1, Name => 'AddCanTransferQueues' &>\
+<td><& /Elements/SelectObject, ObjectType => 'Queue', CheckRight => 'SeeQueue', ShowAll => 1, Name => 'AddCanTransferQueues' &>\
  <input type="submit" value="<&|/l&>Add queue</&>" />\
 %     $Collection = $Object->CanTransferQueuesObj;
 %     $Count = 0;
