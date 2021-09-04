@@ -180,11 +180,11 @@ _"In queue"_, and select the _"General"_ queue.
 
 5. Click on the **Create** button to create the new requirement rule.
 
-    In the list of requirement rules, click on a rule's number or name to edit
-    it.
+In the list of requirement rules, click on a rule's number or name to edit
+it.
 
-    Add as many requirement rules as you need.  They can be switched off
-    temporarily by marking them as disabled.
+Add as many requirement rules as you need.  They can be switched off
+temporarily by marking them as disabled.
 
 ## Delegate control of the filter rule group
 

@@ -256,13 +256,13 @@ values matches.
 
 Click on the B<Create> button to create the new requirement rule.
 
+=back
+
 In the list of requirement rules, click on a rule's number or name to edit
 it.
 
 Add as many requirement rules as you need.  They can be switched off
 temporarily by marking them as disabled.
-
-=back
 
 =head2 Delegate control of the filter rule group
 
