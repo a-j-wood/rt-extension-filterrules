@@ -103,11 +103,6 @@ Known to work with RT 4.2.16, 4.4.4, and 5.0.1.
     Rule groups are set up by the RT administrator under _Admin_ - _Filter
     rule groups_.
 
-    From that page, the RT administrator can also automatically create the
-    general processing scrip which runs tickets through the filter rules.
-    **Make sure this scrip is created**, otherwise none of the filter rules will
-    actually do anything.
-
 # TUTORIAL
 
 For the purposes of this tutorial, we assume that you have these queues:

@@ -122,11 +122,6 @@ later remove this extension without disabling the scrip.
 Rule groups are set up by the RT administrator under I<Admin> - I<Filter
 rule groups>.
 
-From that page, the RT administrator can also automatically create the
-general processing scrip which runs tickets through the filter rules.
-B<Make sure this scrip is created>, otherwise none of the filter rules will
-actually do anything.
-
 =back
 
 =head1 TUTORIAL
