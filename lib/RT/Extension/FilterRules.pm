@@ -340,7 +340,7 @@ the filter rules by going to I<Tools> - I<Filter rules>.  If they have
 access to more than one filter rule group, they can then choose which one's
 rules to edit from the list provided.
 
-Click on the C<Create new filter rule> button to create a new filter rule.
+Click on the B<Create new filter rule> button to create a new filter rule.
 
 =over
 
@@ -392,7 +392,7 @@ message body contains">, and type C<desktop> into the box next to it.
 =item 5.
 
 Choose the actions to perform when this rule is matched.  For this example,
-click on the C<Add action> button, choose I<"Move to queue">, and select the
+click on the B<Add action> button, choose I<"Move to queue">, and select the
 I<"Technical"> queue.
 
 =item 6.

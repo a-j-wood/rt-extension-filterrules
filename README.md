@@ -238,7 +238,7 @@ the filter rules by going to _Tools_ - _Filter rules_.  If they have
 access to more than one filter rule group, they can then choose which one's
 rules to edit from the list provided.
 
-Click on the `Create new filter rule` button to create a new filter rule.
+Click on the **Create new filter rule** button to create a new filter rule.
 
 1. Give the filter rule a name, such as
 _"Escalate desktop wallpaper requests"_.
@@ -258,7 +258,7 @@ this example:
     - Click on the **Add condition** button again, choose  _"Subject or
     message body contains"_, and type `desktop` into the box next to it.
 5. Choose the actions to perform when this rule is matched.  For this example,
-click on the `Add action` button, choose _"Move to queue"_, and select the
+click on the **Add action** button, choose _"Move to queue"_, and select the
 _"Technical"_ queue.
 6. Choose whether to stop processing any further rules in this filter rule
 group when this particular filter rule is matched.
