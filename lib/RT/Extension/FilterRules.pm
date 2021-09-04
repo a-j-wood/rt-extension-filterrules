@@ -433,11 +433,11 @@ When the rule matches, it will move the ticket to the I<Technical> queue.
 
 =back
 
-So for example, if someone creates a ticket in the I<General> queue
-mentioning C<desktop wallpaper> or C<desktop background>, the ticket will be
-moved to the I<Technical> queue, but if they mention C<desktop wallpaper
-paste>, the ticket will not be moved because of the conflict condition about
-the word C<paste>.
+For example, if someone creates a ticket in the I<General> queue mentioning
+C<desktop wallpaper> or C<desktop background>, the ticket will be moved to
+the I<Technical> queue, but if they mention C<desktop wallpaper paste>, the
+ticket will not be moved because of the conflict condition about the word
+C<paste>.
 
 Usually you would not actually move tickets based on keyword matches, this
 is just an example - though you may want to send notification emails when
@@ -449,7 +449,66 @@ I<[Up]> and I<[Down]> links to move filter rules up and down.
 
 =head2 Testing filter rules
 
-(TODO: tutorial on testing filter rules)
+Filter rules can be tested without having to really create new tickets or
+move them between queues, but you will need an existing ticket to use as a
+point of reference.
+
+From either I<Tools> - I<Filter rules> or I<Admin> - I<Filter rule groups>,
+choose the I<Test> option from the page menu at the top right.
+
+=over
+
+=item 1.
+
+Choose a ticket to test against.  This is used in rules regarding ticket
+subject, message body, and so on.
+
+=item 2.
+
+Choose which filter rule group to test against, or I<"All"> to run the test
+against all filter rule groups you have access to.
+
+=item 3.
+
+Select the type of triggering event to simulate.
+
+=item 4.
+
+Choose the queue or queues involved in the simulation.  For instance, if you
+are simulating ticket creation, choose which queue to pretend it is being
+created in.
+
+=item 5.
+
+Choose whether to include disabled rules in the test.  This can be useful if
+you would like to set up new filter rules and test them before using them -
+you can create them but leave them disabled, then run this test with
+disabled rules included.
+
+=back
+
+Click on the B<Test> button to run the test; the results will be shown in
+the I<Results> section below the input form.
+
+The test will not make any changes to tickets or to filter rules.
+
+For each filter rule group, the B<requirement rules> will be processed, and
+a detailed breakdown of the steps involved will be displayed.
+
+If any requirement rules matched, then a breakdown the B<filter rules> will
+be shown, followed by the B<actions> which those filter rules would give
+rise to.
+
+The I<Rule>, I<Match type>, and I<Outcome of test> columns show the overall
+outcome of each rule.  The I<Conflict conditions> and I<Requirement
+conditions> columns give details of all of the individual conditions within
+each rule.
+
+Within the rule processing steps, the I<Event value> refers to the value
+taken from the event - for instance, in a subject matching condition, this
+would be the ticket's subject.  The I<Target value> refers to the value the
+condition is looking for - that is, the values you entered into the form
+when creating the filter rules.
 
 =head1 AUTHOR
 

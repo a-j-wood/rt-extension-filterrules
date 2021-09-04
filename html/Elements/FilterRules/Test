@@ -121,7 +121,7 @@ jQuery(function () {
 % if ($TicketId) {
 \
 <style type="text/css">
-table.FilterRulesRuleChecks { margin-left: 1em; }
+table.FilterRulesRuleChecks { margin: 1em; }
 table.FilterRulesRuleChecks thead { position: sticky; top: 0; }
 table.FilterRulesRuleChecks td { vertical-align: top; }
 </style>
@@ -220,15 +220,20 @@ $RuleChecks
 <tr>\
 <th rowspan="2"><&|/l&>Rule</&></th>\
 <th rowspan="2"><&|/l&>Match type</&></th>\
-<th colspan="2"><&|/l&>Outcome of test</&></th>\
+%# $RuleCheck's EventValue and TargetValue are currently always empty, so
+%# don't try to display them
+%#<th colspan="2"><&|/l&>Outcome of test</&></th>\
+<th colspan="2" rowspan="2"><&|/l&>Outcome of test</&></th>\
 <th rowspan="2">&nbsp;</th>\
 <th colspan="4"><&|/l&>Conflict conditions</&></th>\
 <th rowspan="2">&nbsp;</th>\
 <th colspan="4"><&|/l&>Requirement conditions</&></th>\
 </tr>
 <tr>\
-<th><&|/l&>Event value</&></th>\
-<th><&|/l&>Target value</&></th>\
+%# $RuleCheck's EventValue and TargetValue are currently always empty, so
+%# don't try to display them
+%#<th><&|/l&>Event value</&></th>\
+%#<th><&|/l&>Target value</&></th>\
 <th><&|/l&>Matched</&></th>\
 <th><&|/l&>Message</&></th>\
 <th><&|/l&>Event value</&></th>\
@@ -263,27 +268,35 @@ $RuleChecks
 <% $FilterRule->Name %></td>\
 <td rowspan="<% $RowsNeeded %>">\
 %     if ($RuleCheck->{'MatchType'} eq 'Conflict') {
-<&|/l&>Conflict</&>\
+<&|/l&>Conflict</&><br />\
 %     } elsif ($RuleCheck->{'MatchType'} eq 'Requirement') {
-<&|/l&>Requirement</&>\
+<&|/l&>Requirement</&><br />\
+%     }
+%     if ($RuleCheck->{'Matched'}) {
+<b><&|/l&>Matched</&></b>\
 %     } else {
-<em><&|/l&>No match</&></em>\
+<i><&|/l&>Not matched</&></i>\
 %     }
 </td>\
-<td colspan="2"><% $RuleCheck->{'Message'} %></td>\
+%# $RuleCheck's EventValue and TargetValue are currently always empty, so
+%# don't try to display them
+%#<td colspan="2"><% $RuleCheck->{'Message'} %></td>\
+<td colspan="2" rowspan="<% $RowsNeeded %>"><% $RuleCheck->{'Message'} %></td>\
 \
 %     my %ClearCellWritten = ( 'Conflicts' => 0, 'Requirements' => 0 );
 %     for (my $RowNum = 1; $RowNum <= $RowsNeeded; $RowNum++) {
 %         if ($RowNum > 1) {
 <tr>\
 %         }
-%         if ($RowNum == 2) {
-<td><% $FilterRule->{'EventValue'} %></td>\
-<td><% $FilterRule->{'TargetValue'} %></td>\
-%         }
-%         if ($RowNum == 3) {
-<td colspan="2" rowspan="<% $RowsNeeded + 1 - $RowNum %>">&nbsp;</td>\
-%         }
+%# $RuleCheck's EventValue and TargetValue are currently always empty, so
+%# don't try to display them
+%#%         if ($RowNum == 2) {
+%#<td><% $RuleCheck->{'EventValue'} %></td>\
+%#<td><% $RuleCheck->{'TargetValue'} %></td>\
+%#%         }
+%#%         if ($RowNum == 3) {
+%#<td colspan="2" rowspan="<% $RowsNeeded + 1 - $RowNum %>">&nbsp;</td>\
+%#%         }
 %         foreach my $MatchType ( 'Conflicts', 'Requirements' ) {
 %             my $Spec = shift @{$IndividualDetail{$MatchType}};
 %             if ($RowNum == 1) {
