@@ -133,33 +133,33 @@ actually do anything.
 
 For the purposes of this tutorial, we assume that you have these queues:
 
-=over 16
+=over
 
-=item B<"General">
+=item *
 
-- for general queries;
+B<"General"> - for general queries;
 
-=item B<"Technical">
+=item *
 
-- for more technical matters to be escalated to.
+B<"Technical"> - for more technical matters to be escalated to.
 
 =back
 
 We also assume that you have these user-defined groups set up:
 
-=over 30
+=over
 
-=item B<"Service desk">
+=item *
 
-- containing all first-line analysts;
+B<"Service desk"> - containing all first-line analysts;
 
-=item B<"Service desk management">
+=item *
 
-- containing the leadership team for the service desk;
+B<"Service desk management"> - containing the leadership team for the service desk;
 
-=item B<"Third line">
+=item *
 
-- containing all technical teams.
+B<"Third line"> - containing all technical teams.
 
 =back
 
@@ -509,29 +509,6 @@ taken from the event - for instance, in a subject matching condition, this
 would be the ticket's subject.  The I<Target value> refers to the value the
 condition is looking for - that is, the values you entered into the form
 when creating the filter rules.
-
-=head1 AUTHOR
-
-Andrew Wood
-
-=for html <p>All bugs should be reported via email to <a
-href="mailto:bug-RT-Extension-FilterRules@rt.cpan.org">bug-RT-Extension-FilterRules@rt.cpan.org</a>
-or via the web at <a
-href="http://rt.cpan.org/Public/Dist/Display.html?Name=RT-Extension-FilterRules">rt.cpan.org</a>.</p>
-
-=for text
-    All bugs should be reported via email to
-        bug-RT-Extension-FilterRules@rt.cpan.org
-    or via the web at
-        http://rt.cpan.org/Public/Dist/Display.html?Name=RT-Extension-FilterRules
-
-=head1 LICENSE AND COPYRIGHT
-
-This software is Copyright (c) 2021 by Andrew Wood
-
-This is free software, licensed under:
-
-  The GNU General Public License, Version 2, June 1991
 
 =cut
 
@@ -5514,5 +5491,30 @@ collection of filter rule matches.
 
     RT::Base->_ImportOverlays();
 }
+
+=head1 AUTHOR
+
+Andrew Wood
+
+=for html <p>All bugs should be reported via email to <a
+href="mailto:bug-RT-Extension-FilterRules@rt.cpan.org">bug-RT-Extension-FilterRules@rt.cpan.org</a>
+or via the web at <a
+href="http://rt.cpan.org/Public/Dist/Display.html?Name=RT-Extension-FilterRules">rt.cpan.org</a>.</p>
+
+=for text
+    All bugs should be reported via email to
+        bug-RT-Extension-FilterRules@rt.cpan.org
+    or via the web at
+        http://rt.cpan.org/Public/Dist/Display.html?Name=RT-Extension-FilterRules
+
+=head1 LICENSE AND COPYRIGHT
+
+This software is Copyright (c) 2021 by Andrew Wood
+
+This is free software, licensed under:
+
+  The GNU General Public License, Version 2, June 1991
+
+=cut
 
 1;
