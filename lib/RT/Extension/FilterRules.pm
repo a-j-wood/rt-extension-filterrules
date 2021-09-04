@@ -391,7 +391,6 @@ message body contains">, and type C<desktop> into the box next to it.
 
 =item 5.
 
-
 Choose the actions to perform when this rule is matched.  For this example,
 click on the C<Add action> button, choose I<"Move to queue">, and select the
 I<"Technical"> queue.
@@ -3895,7 +3894,7 @@ Return the moving-to value of the event being tested against this condition.
 
 =head2 TicketQueue
 
-Return the ticket queue ID associated with the event being tested, caching
+Return the ticket queue ID associated with the ticket being tested, caching
 it locally.
 
 =cut
@@ -4114,7 +4113,7 @@ Return the results of an "InQueue" condition check.
 
     sub _InQueue {
         my ( $self, %args ) = @_;
-        my $EventValue = $self->TicketQueue || 'UNKNOWN';
+        my $EventValue = $self->To || 'UNKNOWN';
         if ( $EventValue eq $args{'TargetValue'} ) {
             return ( 1, $self->loc('Queue matches'), $EventValue );
         }

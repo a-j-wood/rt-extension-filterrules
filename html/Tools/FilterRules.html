@@ -3,10 +3,10 @@ Page to manage the filter rules that the current user has access to.
 </%doc>
 \
 <%ARGS>
-$Test => undef
-$id => undef
-$Rule => undef
+$id     => undef
+$Rule   => undef
 $Create => undef
+$Test   => undef
 </%ARGS>
 \
 <%INIT>
@@ -26,7 +26,6 @@ Show the testing form.
 \
 <%ARGS>
 $id => undef
-$TestGroup => undef
 </%ARGS>
 \
 <%INIT>
@@ -34,8 +33,6 @@ my $Collection = RT::FilterRuleGroups->new( $session{'CurrentUser'} );
 $m->comp( 'FilterRules.html:GetFilterRuleGroups',
     'Collection' => $Collection );
 my $Title = loc('Test filter rules');
-
-$TestGroup = $id || 0 if (not defined $TestGroup);
 </%INIT>
 \
 <& /Elements/Header, Title => $Title &>
@@ -71,6 +68,7 @@ the filter rule groups the current user can see.
 \
 <%ARGS>
 $Collection => undef
+$IncludeDisabled => 0
 </%ARGS>
 \
 <%INIT>
@@ -81,7 +79,7 @@ $Collection->Limit(
     'FIELD'    => 'Disabled',
     'VALUE'    => 0,
     'OPERATOR' => '='
-);
+) if (not $IncludeDisabled);
 
 my $IsSuperUser = $session{'CurrentUser'}
     ->HasRight( Object => $RT::System, Right => 'SuperUser' );
